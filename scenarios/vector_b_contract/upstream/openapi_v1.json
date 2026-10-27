@@ -1,0 +1,76 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Stripe-Compatible Payment Gateway API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v2/payments/charge": {
+      "post": {
+        "summary": "Process a customer payment charge",
+        "operationId": "createCharge",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["customer_id", "amount", "currency", "customer_address"],
+                "properties": {
+                  "customer_id": {
+                    "type": "string",
+                    "description": "Unique customer reference ID"
+                  },
+                  "amount": {
+                    "type": "number",
+                    "format": "float",
+                    "description": "Charge amount in primary currency units (e.g., 49.99)"
+                  },
+                  "currency": {
+                    "type": "string",
+                    "description": "ISO 4217 currency code (e.g., USD)"
+                  },
+                  "customer_address": {
+                    "type": "string",
+                    "description": "Primary street address of the customer"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Payment succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["charge_id", "status"],
+                  "properties": {
+                    "charge_id": {"type": "string"},
+                    "status": {"type": "string", "example": "succeeded"}
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request / Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {"type": "string"},
+                    "details": {"type": "array", "items": {"type": "string"}}
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
