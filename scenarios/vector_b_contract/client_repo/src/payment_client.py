@@ -1,13 +1,10 @@
 """
 Downstream Payment Client executing HTTP charges.
-Refactored by Aegis SRE (Meta Muse Spark) to construct payloads adhering to Upstream OpenAPI v2 Specification.
+Currently constructs payloads adhering to Legacy OpenAPI v1 Specification.
 """
 
 from typing import Dict, Any
-try:
-    from .models import ChargeRequest, ChargeResponse
-except (ImportError, ValueError):
-    from src.models import ChargeRequest, ChargeResponse
+from .models import ChargeRequest, ChargeResponse
 
 
 class PaymentClient:
@@ -16,32 +13,12 @@ class PaymentClient:
         self.transport = transport
 
     def build_charge_payload(self, request: ChargeRequest) -> Dict[str, Any]:
-        """
-        Constructs the outbound JSON payload for POST /api/v2/payments/charge conforming to v2:
-        - amount_cents (integer) instead of legacy amount (float)
-        - billing.address.line1 instead of legacy customer_address
-        """
-        # Calculate amount_cents
-        if request.amount_cents is not None:
-            cents = request.amount_cents
-        elif request.amount is not None:
-            cents = int(round(request.amount * 100))
-        else:
-            raise ValueError("Either amount_cents or amount must be specified")
-
-        # Construct nested billing
-        if request.billing is not None:
-            billing_payload = request.billing.model_dump()
-        elif request.customer_address is not None:
-            billing_payload = {"address": {"line1": request.customer_address}}
-        else:
-            raise ValueError("Either billing or customer_address must be specified")
-
+        """Constructs the outbound JSON payload for POST /api/v2/payments/charge."""
         return {
             "customer_id": request.customer_id,
-            "amount_cents": cents,
+            "amount": request.amount,
             "currency": request.currency,
-            "billing": billing_payload
+            "customer_address": request.customer_address
         }
 
     def charge_customer(self, request: ChargeRequest) -> ChargeResponse:
@@ -49,4 +26,4 @@ class PaymentClient:
         if self.transport:
             return self.transport.send_charge(payload)
         
-        return ChargeResponse(charge_id="ch_v2_live_123", status="succeeded")
+        return ChargeResponse(charge_id="ch_mock_123", status="succeeded")

@@ -128,8 +128,13 @@ def run_vector_b_remediation():
     print(f" -> Generated GitHub PR #{pr['pr_number']}: {pr['html_url']}")
     print(f"    Status: {pr.get('status', 'SUCCESS')}")
 
-    # Apply verified patch to client repo so it stays in remediated state if desired
-    apply_verified_patch_to_repo(client_repo_path, refactored_files)
+    # Apply verified patch only if explicitly requested via argument
+    if "--apply" in sys.argv:
+        apply_verified_patch_to_repo(client_repo_path, refactored_files)
+        print(" -> Applied verified patch to client repository files.")
+    else:
+        print(" -> Sandbox Mandate preserved: client repository left in clean reproducible outage state (use --apply to write to disk).")
+
     print("\n🎉 Incident Remediation Complete! All systems verified green.")
     print("=" * 75)
 

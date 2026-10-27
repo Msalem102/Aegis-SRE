@@ -20,15 +20,27 @@ class DependencyMapper:
         affected_files: Dict[str, str] = {}
         affected_symbols: List[str] = []
 
-        # Extract search keywords from breaking changes
+        # Extract search keywords from breaking changes (endpoints, field names, path segments)
         keywords = set()
         for change in breaking_changes:
             if "endpoint" in change:
                 keywords.add(change["endpoint"])
-            if "old_field" in change:
-                keywords.add(change["old_field"])
-            if "new_field" in change:
-                keywords.add(change["new_field"])
+                # Also add path segments (e.g. /payments/charge -> payments, charge)
+                for segment in change["endpoint"].strip("/").split("/"):
+                    if len(segment) > 2:
+                        keywords.add(segment)
+            if "field_path" in change:
+                for token in change["field_path"].split("."):
+                    if len(token) > 2:
+                        keywords.add(token)
+            if "old_field_path" in change:
+                for token in change["old_field_path"].split("."):
+                    if len(token) > 2:
+                        keywords.add(token)
+            if "new_field_path" in change:
+                for token in change["new_field_path"].split("."):
+                    if len(token) > 2:
+                        keywords.add(token)
 
         # Scan repo files (excluding venvs, git, cache)
         for root, dirs, files in os.walk(self.repo_root):
@@ -42,16 +54,12 @@ class DependencyMapper:
                         with open(file_path, "r", encoding="utf-8") as f:
                             content = f.read()
 
-                        # Check if file references any keywords or related payment concepts
-                        is_affected = False
-                        for kw in keywords:
-                            if kw in content:
-                                is_affected = True
-                                break
+                        # Check if file references any keywords derived from the breaking changes
+                        is_affected = any(kw in content for kw in keywords)
 
-                        # Also include key client/model/test files if they belong to payment domain
-                        if not is_affected and any(k in file.lower() for k in ["model", "client", "payment"]):
-                            is_affected = True
+                        # Also match files whose name indicates architectural client layer
+                        if not is_affected and any(k in file.lower() for k in ["model", "client", "service"]):
+                            is_affected = any(kw in content for kw in keywords)
 
                         if is_affected:
                             affected_files[rel_path] = content
