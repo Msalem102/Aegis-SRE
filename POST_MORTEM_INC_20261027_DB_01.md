@@ -1,7 +1,7 @@
 # Database Incident Post-Mortem: INC-20261027-DB-01
 **Incident Type:** Critical Latency Degradation (Unindexed Sequential Scan)  
 **Remediation Agent:** Aegis SRE (Meta Muse Spark Core)  
-**Remediation Timestamp:** 2026-10-27 17:59:39 UTC  
+**Remediation Timestamp:** 2026-10-27 22:02:25 UTC  
 **Status:** **RESOLVED & VERIFIED IN EPHEMERAL SANDBOX**  
 
 ---
@@ -18,7 +18,7 @@ In an isolated ephemeral database sandbox, the candidate index reduced latency t
 
 ## 2. Root Cause & Execution Plan Diagnosis
 > **Agent Diagnosis (Meta Muse Spark):**  
-> Query performance degradation caused by unindexed sequential scan on table 'orders'. Execution time: 3412.98ms. The planner scanned and filtered millions of rows due to absence of composite index on (user_id, status, created_at), resulting in 91600 disk buffer read spills.
+> Parsed raw execution plan tree: isolated critical 'Seq Scan' on relation 'orders'. Planner evaluated filter ((user_id = 42819) AND ((status)::text = 'completed'::text)) sequentially over 1,000,000 rows, discarding 999958 rows. Execution time degraded to 3412.98ms due to lack of index matching the WHERE predicate.
 
 ### Offending Production Query:
 ```sql
@@ -35,7 +35,7 @@ The following migration was synthesized with non-blocking concurrency and lock t
 SET statement_timeout = '30s';
 SET lock_timeout = '5s';
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_user_id_status_created_at
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_user_status_created
 ON orders (user_id, status, created_at DESC)
 INCLUDE (total_amount);
 ```

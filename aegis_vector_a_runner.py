@@ -46,39 +46,36 @@ def run_vector_a_remediation(telemetry_path: str = "scenarios/vector_a_db/incide
     print(f" -> Offending Query: \"{query[:70]}...\"")
 
     # -------------------------------------------------------------
-    # Step 2: Parse Raw EXPLAIN (ANALYZE, BUFFERS) Execution Tree
+    # Step 2: Feed Raw Execution Tree Directly to Meta Muse Spark
     # -------------------------------------------------------------
-    print("\n[Step 2] Analyzing Execution Plan Tree Bottlenecks...")
-    analyzer = ExecutionPlanAnalyzer(telemetry.get("raw_explain_analyze_buffers_json", []))
-    plan_analysis = analyzer.analyze_plan()
-
-    print(f" -> Execution Time: {plan_analysis['execution_time_ms']:.2f}ms")
-    print(f" -> Buffer Cache Hit Ratio: {plan_analysis['overall_cache_hit_ratio']*100:.1f}% ({plan_analysis['total_shared_read_blocks']} disk page read spills)")
-    print(f" -> Detected {len(plan_analysis['bottlenecks'])} plan bottlenecks:")
-    for b in plan_analysis["bottlenecks"]:
-        print(f"    • [{b['severity']}] {b['description']}")
-
-    # -------------------------------------------------------------
-    # Step 3: Meta Muse Spark Reasoning & Safe DDL Synthesis
-    # -------------------------------------------------------------
-    print("\n[Step 3] Prompting Meta Muse Spark for Database Remediation...")
-    muse = MuseDBClient()
-    synthesis = muse.synthesize_database_remediation(query, table_catalog, plan_analysis)
+    print("\n[Step 2] Piping Raw Execution Plan Tree & Catalog Directly to Meta Muse Spark...")
+    raw_plan_json = telemetry.get("raw_explain_analyze_buffers_json", [])
     
-    print(f" -> Muse Spark Diagnosis:\n    \"{synthesis['diagnosis']}\"")
-    print(f" -> Chosen Strategy: {synthesis['strategy']} ({synthesis['index_name']})")
+    muse = MuseDBClient()
+    synthesis = muse.synthesize_database_remediation(
+        query=query,
+        table_catalog=table_catalog,
+        raw_explain_plan=raw_plan_json
+    )
+
+    print(f" -> Muse Spark Plan Diagnosis:\n    \"{synthesis['plan_tree_diagnosis']}\"")
+    print(f" -> Muse Spark Buffer Analysis:\n    \"{synthesis['cost_and_buffer_analysis']}\"")
+    print(f" -> Selected Strategy: {synthesis['strategy']} ({synthesis['index_name']})")
+    print(f" -> Indexed Columns:   {', '.join(synthesis.get('indexed_columns', []))}")
+    if synthesis.get("include_columns"):
+        print(f" -> Covering INCLUDE:  {', '.join(synthesis.get('include_columns', []))}")
 
     # -------------------------------------------------------------
-    # Step 4: Strict DDL Safety & Policy Guardrails
+    # Step 3: Enforcing Production DDL Safety Guardrails
     # -------------------------------------------------------------
-    print("\n[Step 4] Enforcing Production Safety Guardrails...")
+    print("\n[Step 3] Enforcing Production Safety Guardrails on Synthesized DDL...")
     ddl_script = synthesis["ddl_script"]
     is_safe, violations = DDLSafetyGuard.validate_ddl(ddl_script)
     if is_safe:
         print(" ✅ DDL Safety Policy Gate: PASSED")
-        print("    • Zero destructive statements (DROP/TRUNCATE blocked)")
-        print("    • CONCURRENTLY enabled (Zero write-locks)")
-        print("    • Lock timeout boundary: '5s' (Zero traffic blocking)")
+        print("    • Zero destructive statements (DROP/TRUNCATE hard-blocked)")
+        print("    • CONCURRENTLY enabled (Zero table write locks)")
+        print("    • Lock timeout bounded: '5s' (Zero traffic blocking)")
     else:
         print(f" ❌ Safety Violations Detected: {violations}")
         sys.exit(1)
@@ -88,9 +85,9 @@ def run_vector_a_remediation(telemetry_path: str = "scenarios/vector_a_db/incide
     print("------------------------------------------")
 
     # -------------------------------------------------------------
-    # Step 5: Ephemeral Database Sandbox Verification Gate
+    # Step 4: Ephemeral Database Sandbox Verification Gate
     # -------------------------------------------------------------
-    print("\n[Step 5] Deterministic Sandbox Gate: Verifying in Ephemeral Postgres...")
+    print("\n[Step 4] Deterministic Sandbox Gate: Verifying in Ephemeral Postgres...")
     # Load remediated plan fixture if available
     remediated_path = "scenarios/vector_a_db/remediated_telemetry.json"
     remediated_fixture = None
@@ -118,14 +115,14 @@ def run_vector_a_remediation(telemetry_path: str = "scenarios/vector_a_db/incide
         sys.exit(1)
 
     # -------------------------------------------------------------
-    # Step 6: Artifact Delivery - GitHub Migration PR & Post-Mortem
+    # Step 5: Artifact Delivery - GitHub Migration PR & Post-Mortem
     # -------------------------------------------------------------
-    print("\n[Step 6] Synthesizing Pull Request & Enterprise Database Post-Mortem...")
+    print("\n[Step 5] Synthesizing Pull Request & Enterprise Database Post-Mortem...")
     delivery = DBDeliveryEngine()
     artifacts = delivery.synthesize_db_delivery_artifacts(
         incident_id=incident_id,
         query=query,
-        diagnosis=synthesis["diagnosis"],
+        diagnosis=synthesis["plan_tree_diagnosis"],
         ddl_script=ddl_script,
         sandbox_result=sandbox_result
     )
