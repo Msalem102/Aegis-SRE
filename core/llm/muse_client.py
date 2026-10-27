@@ -231,3 +231,116 @@ class PaymentClient:
             ),
             "refactored_files": refactored_files
         }
+
+    def generate_incident_delivery_artifacts(
+        self,
+        incident_id: str,
+        breaking_changes: List[Dict[str, Any]],
+        unified_diff: str,
+        sandbox_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Prompts Meta Muse Spark to author the GitHub PR title, PR description,
+        and enterprise post-mortem narrative dynamically.
+        """
+        system_prompt = (
+            "You are Aegis SRE's Incident Delivery Core powered by Meta Muse Spark. "
+            "Your task is to analyze the resolved incident, the unified code diff, and the sandbox verification logs, "
+            "and synthesize an enterprise Pull Request title, PR summary, and comprehensive Markdown Post-Mortem.\n"
+            "Output STRICT JSON format:\n"
+            "{\n"
+            '  "pr_title": "Conventional commit title (e.g. fix(contract): reconcile ...)",\n'
+            '  "pr_summary": "Concise bulleted summary of code refactors",\n'
+            '  "executive_summary": "High-level paragraph describing incident and automated resolution",\n'
+            '  "root_cause_analysis": "Technical explanation of contract drift and caller impact",\n'
+            '  "post_mortem_markdown": "Full Markdown document for the incident record"\n'
+            "}"
+        )
+
+        user_prompt = {
+            "incident_id": incident_id,
+            "breaking_changes": breaking_changes,
+            "unified_diff": unified_diff,
+            "sandbox_telemetry": {
+                "runner_type": sandbox_result.get("runner_type"),
+                "sandbox_id": sandbox_result.get("sandbox_id"),
+                "passed": sandbox_result.get("passed"),
+                "exit_code": sandbox_result.get("exit_code"),
+                "stdout_summary": sandbox_result.get("stdout", "")[:500]
+            }
+        }
+
+        if self.api_key and self.api_key != "MOCK":
+            try:
+                return self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2))
+            except Exception as e:
+                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using deterministic artifact synthesis.")
+
+        # Deterministic generation fallback for offline testing
+        return self._deterministic_artifact_synthesis(
+            incident_id, breaking_changes, unified_diff, sandbox_result
+        )
+
+    def _deterministic_artifact_synthesis(
+        self,
+        incident_id: str,
+        breaking_changes: List[Dict[str, Any]],
+        unified_diff: str,
+        sandbox_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        changes_summary = "\n".join(
+            [f"- **{c.get('type', 'CHANGE')}**: {c.get('description', '')}" for c in breaking_changes]
+        )
+        pr_title = f"fix(contract): resolve {incident_id} breaking schema changes"
+        pr_summary = (
+            "- Reconciled client models with upstream OpenAPI v2 contract\n"
+            "- Added backward-compatible payload normalizer\n"
+            f"- Verified in isolated {sandbox_result.get('runner_type', 'sandbox')} with exit code 0"
+        )
+        exec_summary = (
+            f"Automated alert {incident_id} detected upstream contract drift. "
+            "Aegis SRE intercepted schema breaking changes, mapped caller dependencies, and autonomously "
+            "refactored client models. The candidate patch was deterministically verified in an ephemeral sandbox."
+        )
+        rca = (
+            f"The upstream service deployed breaking changes to the API contract:\n{changes_summary}\n\n"
+            "Downstream clients sending legacy payload structures encountered 422 Unprocessable Entity rejections. "
+            "Aegis SRE reconciled data models to satisfy new upstream schema constraints while preserving backwards compatibility."
+        )
+
+        md = f"""# Incident Post-Mortem: {incident_id}
+**Remediation Engine:** Aegis SRE (Meta Muse Spark Core)  
+**Verification Environment:** `{sandbox_result.get('runner_type', 'EPHEMERAL_SANDBOX')}` (ID: `{sandbox_result.get('sandbox_id')}`)  
+**Sandbox Status:** `PASSED (Exit Code {sandbox_result.get('exit_code')})`  
+
+---
+
+## 1. Executive Summary
+{exec_summary}
+
+---
+
+## 2. Root Cause Analysis
+{rca}
+
+---
+
+## 3. Verified Unified Diff
+```diff
+{unified_diff}
+```
+
+---
+
+## 4. Deterministic Verification Gate Proof
+```text
+{sandbox_result.get('stdout', '').strip()}
+```
+"""
+        return {
+            "pr_title": pr_title,
+            "pr_summary": pr_summary,
+            "executive_summary": exec_summary,
+            "root_cause_analysis": rca,
+            "post_mortem_markdown": md
+        }

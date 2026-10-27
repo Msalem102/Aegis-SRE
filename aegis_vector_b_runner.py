@@ -22,7 +22,8 @@ if sys.stdout.encoding != "utf-8":
 from core.diff.openapi_differ import diff_specs_from_files
 from core.analysis.dependency_mapper import DependencyMapper
 from core.llm.muse_client import MuseSparkClient
-from core.sandbox.test_runner import SandboxTestRunner, apply_verified_patch_to_repo
+from core.sandbox.modal_sandbox import EphemeralSandbox
+from core.sandbox.test_runner import apply_verified_patch_to_repo
 from core.delivery.github_delivery import GitHubDeliveryEngine
 
 
@@ -61,10 +62,11 @@ def run_vector_b_remediation():
     # Step 3: Verify Pre-Remediation Baseline (Assert Failure)
     # -------------------------------------------------------------
     print("\n[Step 3] Executing Baseline Test Suite in Isolated Sandbox...")
-    sandbox = SandboxTestRunner(client_repo_path, python_interpreter=interpreter_path)
-    baseline_run = sandbox.verify_patch({}) # empty patch = current codebase
+    sandbox = EphemeralSandbox(client_repo_path, python_interpreter=interpreter_path)
+    baseline_run = sandbox.execute_test_suite({}) # empty patch = current codebase
     if not baseline_run["passed"]:
-        print(" ❌ Baseline Status: TESTS FAILING (Exit Code 1) - Incident Active!")
+        print(f" ❌ Baseline Status: TESTS FAILING (Exit Code {baseline_run['exit_code']}) - Incident Active!")
+        print(f"    Runner Environment: {baseline_run['runner_type']} ({baseline_run['sandbox_id']})")
         first_err_line = [line for line in baseline_run["stdout"].splitlines() if "ValueError" in line or "FAILED" in line]
         print(f"    Error: {' | '.join(first_err_line[:2])}")
     else:
@@ -84,48 +86,49 @@ def run_vector_b_remediation():
     # Step 5: Ephemeral Sandbox Verification Gate
     # -------------------------------------------------------------
     print("\n[Step 5] Deterministic Sandbox Gate: Testing Candidate Patch...")
-    sandbox_result = sandbox.verify_patch(refactored_files)
+    sandbox_result = sandbox.execute_test_suite(refactored_files)
 
     if sandbox_result["passed"]:
-        print(" ✅ Deterministic Gate: PASSED (Exit Code 0)")
-        print(f"    Sandbox ID: {sandbox_result['sandbox_id']}")
+        print(f" ✅ Deterministic Gate: PASSED (Exit Code {sandbox_result['exit_code']})")
+        print(f"    Runner Environment: {sandbox_result['runner_type']} ({sandbox_result['sandbox_id']})")
         print(f"    All integration tests passed successfully.")
     else:
-        print(" ❌ Deterministic Gate: FAILED")
+        print(f" ❌ Deterministic Gate: FAILED (Exit Code {sandbox_result['exit_code']})")
         print(sandbox_result["stdout"])
         print(sandbox_result["stderr"])
         sys.exit(1)
 
     # -------------------------------------------------------------
-    # Step 6: Artifact Delivery - GitHub PR & Post-Mortem
+    # Step 6: Artifact Delivery - Model-Authored PR & Post-Mortem
     # -------------------------------------------------------------
-    print("\n[Step 6] Generating GitHub PR & Markdown Incident Post-Mortem...")
+    print("\n[Step 6] Synthesizing Pull Request & Enterprise Post-Mortem with Meta Muse Spark...")
     delivery = GitHubDeliveryEngine()
     unified_diff = delivery.generate_diff(target_files, refactored_files)
     
-    post_mortem = delivery.generate_post_mortem(
-        incident_id="INC-20261027-API-01",
-        service_name="payment-gateway-client",
-        diagnosis=synthesis["diagnosis"],
+    # Prompt Muse Spark to author the complete PR and Post-Mortem
+    incident_id = "INC-20261027-API-01"
+    artifacts = muse.generate_incident_delivery_artifacts(
+        incident_id=incident_id,
         breaking_changes=breaking_changes,
         unified_diff=unified_diff,
         sandbox_result=sandbox_result
     )
 
-    # Write post-mortem to artifacts directory or repo
-    post_mortem_file = "POST_MORTEM_INC_20261027_API_01.md"
+    # Save model-generated post-mortem
+    post_mortem_file = f"POST_MORTEM_{incident_id.replace('-', '_')}.md"
     with open(post_mortem_file, "w", encoding="utf-8") as f:
-        f.write(post_mortem)
-    print(f" -> Created Enterprise Post-Mortem: {post_mortem_file}")
+        f.write(artifacts["post_mortem_markdown"])
+    print(f" -> Authored Enterprise Post-Mortem: {post_mortem_file}")
 
     # Generate PR
     pr = delivery.create_pull_request(
         repo="meta-sre/payment-client",
-        branch_name="aegis/remediate-inc-20261027-api-01",
-        pr_title="fix(contract): reconcile payment client with upstream OpenAPI v2 schema",
-        pr_body=post_mortem
+        branch_name=f"aegis/remediate-{incident_id.lower()}",
+        pr_title=artifacts["pr_title"],
+        pr_body=artifacts["post_mortem_markdown"]
     )
-    print(f" -> Generated GitHub PR #{pr['pr_number']}: {pr['html_url']}")
+    print(f" -> Generated GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
+    print(f"    PR Link: {pr['html_url']}")
     print(f"    Status: {pr.get('status', 'SUCCESS')}")
 
     # Apply verified patch only if explicitly requested via argument
