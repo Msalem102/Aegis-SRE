@@ -1,14 +1,14 @@
 """
-Meta Muse Spark Client Wrapper.
+Meta Muse Spark Client Wrapper (100% Domain-Agnostic).
 Provides structured prompt orchestration for:
 - API Breaking Change Refactoring (Vector B)
-- Database Execution Plan Diagnosis & Zero-Downtime DDL Synthesis (Vector A)
-Supports live Meta Model API / Baseten / Fireworks endpoints, with deterministic fallback.
+- Incident Post-Mortem & Pull Request Synthesis (Vector A & Vector B)
 """
 
 from typing import Dict, Any, List, Optional
 import os
 import json
+import re
 import httpx
 
 
@@ -25,47 +25,67 @@ class MuseSparkClient:
 
     def synthesize_contract_refactor(
         self,
+        incident_error_log: Dict[str, Any],
         breaking_changes: List[Dict[str, Any]],
         affected_files: Dict[str, str],
         previous_errors: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Prompts Meta Muse Spark to refactor downstream client models and callers
-        to resolve upstream contract drift.
+        Prompts Meta Muse Spark with the triggering runtime error log, the computed OpenAPI AST diff,
+        and the downstream caller files to synthesize a code refactor patch.
         """
         system_prompt = (
             "You are Aegis SRE's Code Synthesis Core powered by Meta Muse Spark. "
-            "Your task is to refactor downstream API client code to resolve upstream contract drift. "
+            "An upstream API change has caused runtime errors in a downstream service. "
+            "You are given:\n"
+            "1. The runtime error log / HTTP failure payload that triggered this incident.\n"
+            "2. The structural diff between the previous and new upstream API specifications.\n"
+            "3. The downstream source files that interact with this API.\n"
+            "4. (Optional) Test failure logs from a previous sandbox verification attempt.\n\n"
+            "Your task is to refactor the downstream source files so they conform to the new upstream API contract "
+            "while preserving backward compatibility for internal callers.\n\n"
             "You must output STRICT JSON matching this schema:\n"
             "{\n"
-            '  "diagnosis": "concise explanation of contract changes and resolution",\n'
+            '  "diagnosis": "concise technical root-cause analysis connecting the runtime error to the schema diff",\n'
             '  "refactored_files": {\n'
-            '     "path/to/file.py": "full refactored file content"\n'
+            '     "relative/path/to/file.py": "complete refactored file source code"\n'
             "  }\n"
             "}\n"
             "Rules:\n"
-            "1. Output ONLY valid JSON without markdown fences around it if possible, or inside a single ```json block.\n"
-            "2. Ensure models and clients convert legacy parameters appropriately (e.g., amount dollars -> integer amount_cents).\n"
-            "3. Ensure nested schemas like billing.address.line1 are properly constructed.\n"
-            "4. Do NOT break existing client signatures if callers still pass high-level fields (provide backward-compatible constructor or mapping)."
+            "1. Output ONLY valid JSON.\n"
+            "2. Reconcile any renamed fields, type conversions, or newly nested object hierarchies shown in the diff.\n"
+            "3. Do NOT modify test assertions in test files unless the test itself is invalid; prefer fixing the client and model implementation so existing caller patterns continue to work seamlessly.\n"
+            "4. If previous_sandbox_test_failure is provided, fix the exact error shown in the traceback."
         )
 
+        # Filter out test files from modification targets so the agent fixes implementation, not tests,
+        # while still giving the agent visibility into the test files as context.
+        editable_files = {}
+        readonly_test_context = {}
+        for path, content in affected_files.items():
+            norm = path.replace("\\", "/")
+            if "test" in os.path.basename(norm).lower():
+                readonly_test_context[path] = content
+            else:
+                editable_files[path] = content
+
         user_prompt = {
-            "task": "Refactor client code for upstream API breaking changes",
-            "breaking_changes": breaking_changes,
-            "target_files": affected_files,
+            "triggering_incident_error": incident_error_log,
+            "openapi_structural_diff": breaking_changes,
+            "editable_source_files": editable_files,
+            "readonly_test_context": readonly_test_context,
             "previous_sandbox_test_failure": previous_errors
         }
 
-        # If live API key is configured, call Meta Model API endpoint
         if self.api_key and self.api_key != "MOCK":
             try:
                 return self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2))
             except Exception as e:
-                print(f"[Aegis LLM Warning] Live API call failed ({e}). Falling back to deterministic synthesis.")
+                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local AST synthesizer.")
 
-        # Deterministic Synthesis Engine (reproducible baseline)
-        return self._deterministic_vector_b_synthesis(breaking_changes, affected_files)
+        return self._generic_ast_contract_synthesizer(
+            incident_error_log, breaking_changes, editable_files, previous_errors
+        )
 
     def _call_live_api(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
         """Invokes the Meta Model API chat completion endpoint."""
@@ -83,13 +103,12 @@ class MuseSparkClient:
             "response_format": {"type": "json_object"}
         }
 
-        with httpx.Client(timeout=45.0) as client:
+        with httpx.Client(timeout=60.0) as client:
             resp = client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
-            
-            # Clean markdown codeblocks if present
+
             if content.startswith("```"):
                 lines = content.strip().split("\n")
                 if lines[0].startswith("```"):
@@ -100,247 +119,218 @@ class MuseSparkClient:
 
             return json.loads(content)
 
-    def _deterministic_vector_b_synthesis(
-        self, breaking_changes: List[Dict[str, Any]], affected_files: Dict[str, str]
+    def _generic_ast_contract_synthesizer(
+        self,
+        incident_error_log: Dict[str, Any],
+        breaking_changes: List[Dict[str, Any]],
+        editable_files: Dict[str, str],
+        previous_errors: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Deterministic, high-fidelity synthesis for Vector B contract drift remediation.
-        Ensures 100% reproducible test suite passes during local evaluation and demo recording.
+        Rule-driven AST/schema adapter used only when no external LLM API key is configured.
+        Dynamically reads the diff's removed fields, newly required fields, and nested schemas
+        to generate an adapter layer without hardcoded field names.
         """
-        refactored_files = {}
+        removed_fields = [
+            c["field_path"] for c in breaking_changes if c.get("type") == "FIELD_REMOVED"
+        ]
+        newly_required = [
+            c["field_path"] for c in breaking_changes if c.get("type") == "FIELD_NEWLY_REQUIRED"
+        ]
+        nested_moves = [
+            c for c in breaking_changes if c.get("type") == "FIELD_STRUCTURALLY_NESTED"
+        ]
+        type_changes = [
+            c for c in breaking_changes if c.get("type") == "FIELD_TYPE_CHANGED"
+        ]
 
-        # 1. Refactor models.py to support v2 nested billing and amount_cents while allowing backward-compatible init
-        models_code = '''"""
-Downstream Client Data Models for Payment Gateway Service.
-Refactored by Aegis SRE (Meta Muse Spark) to adhere to Upstream OpenAPI v2 Specification.
-"""
+        # Build dynamic mapping rules from the diff
+        field_migrations = {}
+        # 1. Explicit structural moves detected by differ
+        for move in nested_moves:
+            field_migrations[move["old_field_path"]] = {
+                "target": move["new_field_path"],
+                "transform": "nested_object"
+            }
 
-from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field, model_validator
-
-
-class BillingAddress(BaseModel):
-    line1: str = Field(..., description="Primary street address")
-
-
-class BillingDetails(BaseModel):
-    address: BillingAddress
-
-
-class ChargeRequest(BaseModel):
-    customer_id: str
-    amount: Optional[float] = Field(default=None, description="Legacy charge amount in dollars (e.g. 49.99)")
-    amount_cents: Optional[int] = Field(default=None, description="v2 charge amount strictly in integer cents")
-    currency: str = "USD"
-    customer_address: Optional[str] = Field(default=None, description="Legacy primary customer address")
-    billing: Optional[BillingDetails] = Field(default=None, description="v2 nested billing details")
-
-    @model_validator(mode="before")
-    @classmethod
-    def reconcile_v1_and_v2_fields(cls, values: Any) -> Any:
-        if isinstance(values, dict):
-            # Convert legacy dollars to integer cents if amount_cents not provided
-            if values.get("amount_cents") is None and values.get("amount") is not None:
-                values["amount_cents"] = int(round(float(values["amount"]) * 100))
-            
-            # Convert legacy customer_address to nested billing.address.line1
-            if values.get("billing") is None and values.get("customer_address") is not None:
-                values["billing"] = {
-                    "address": {
-                        "line1": values["customer_address"]
+        # 2. Match remaining removed fields to newly_required fields by stem/similarity
+        unmapped_removed = [f for f in removed_fields if f not in field_migrations]
+        for rem in unmapped_removed:
+            for req in newly_required:
+                if rem in req or req in rem:
+                    # Check if unit conversion like _cents is implied
+                    transform = "int_x100" if req.endswith("_cents") and not rem.endswith("_cents") else "direct"
+                    field_migrations[rem] = {
+                        "target": req,
+                        "transform": transform
                     }
-                }
-        return values
 
+        refactored_files = {}
+        migrations_json = json.dumps(field_migrations)
 
-class ChargeResponse(BaseModel):
-    charge_id: str
-    status: str
+        for file_path, source in editable_files.items():
+            # If the file defines a payload builder (dict return in a method), inject dynamic schema transform
+            if "def " in source and "return {" in source:
+                # Inject a generic payload transformer helper that applies field_migrations dynamically
+                helper_code = f'''
+
+def _aegis_reconcile_contract_payload(raw_payload: dict) -> dict:
+    """Auto-generated by Aegis SRE from OpenAPI structural diff."""
+    migrations = {migrations_json}
+    result = dict(raw_payload)
+    for old_key, rule in migrations.items():
+        if old_key in result and result[old_key] is not None:
+            val = result.pop(old_key)
+            target_path = rule["target"].split(".")
+            if rule["transform"] == "int_x100":
+                val = int(round(float(val) * 100))
+            curr = result
+            for part in target_path[:-1]:
+                curr = curr.setdefault(part, {{}})
+            curr[target_path[-1]] = val
+    return result
 '''
+                # Wrap dictionary returns inside methods with _aegis_reconcile_contract_payload
+                modified = re.sub(
+                    r"return\s*\{([^}]+)\}",
+                    r"return _aegis_reconcile_contract_payload({\1})",
+                    source
+                )
+                # Ensure relative imports also work when executed from test runner root
+                modified = re.sub(
+                    r"from\s+\.(\w+)\s+import\s+([^\n]+)",
+                    r"try:\n    from .\1 import \2\nexcept ImportError:\n    from src.\1 import \2",
+                    modified
+                )
+                refactored_files[file_path] = modified + helper_code
 
-        # 2. Refactor payment_client.py to construct strict v2 payload
-        client_code = '''"""
-Downstream Payment Client executing HTTP charges.
-Refactored by Aegis SRE (Meta Muse Spark) to construct payloads adhering to Upstream OpenAPI v2 Specification.
-"""
-
-from typing import Dict, Any
-try:
-    from .models import ChargeRequest, ChargeResponse
-except (ImportError, ValueError):
-    from src.models import ChargeRequest, ChargeResponse
-
-
-class PaymentClient:
-    def __init__(self, base_url: str = "https://api.gateway.internal", transport=None):
-        self.base_url = base_url
-        self.transport = transport
-
-    def build_charge_payload(self, request: ChargeRequest) -> Dict[str, Any]:
-        """
-        Constructs the outbound JSON payload for POST /api/v2/payments/charge conforming to v2:
-        - amount_cents (integer) instead of legacy amount (float)
-        - billing.address.line1 instead of legacy customer_address
-        """
-        # Calculate amount_cents
-        if request.amount_cents is not None:
-            cents = request.amount_cents
-        elif request.amount is not None:
-            cents = int(round(request.amount * 100))
-        else:
-            raise ValueError("Either amount_cents or amount must be specified")
-
-        # Construct nested billing
-        if request.billing is not None:
-            billing_payload = request.billing.model_dump()
-        elif request.customer_address is not None:
-            billing_payload = {"address": {"line1": request.customer_address}}
-        else:
-            raise ValueError("Either billing or customer_address must be specified")
+        err_msg = incident_error_log.get("error_message", "Upstream contract validation failure")
+        diagnosis = (
+            f"Triggered by runtime error: '{err_msg}'. "
+            f"OpenAPI structural diff identified removed fields {removed_fields}, "
+            f"newly required fields {newly_required}, and nested relocations {[m['new_field_path'] for m in nested_moves]}. "
+            f"Synthesized dynamic payload reconciliation layer for {list(refactored_files.keys())}."
+        )
 
         return {
-            "customer_id": request.customer_id,
-            "amount_cents": cents,
-            "currency": request.currency,
-            "billing": billing_payload
-        }
-
-    def charge_customer(self, request: ChargeRequest) -> ChargeResponse:
-        payload = self.build_charge_payload(request)
-        if self.transport:
-            return self.transport.send_charge(payload)
-        
-        return ChargeResponse(charge_id="ch_v2_live_123", status="succeeded")
-'''
-
-        for file_path in affected_files.keys():
-            normalized = file_path.replace("\\", "/")
-            base_name = os.path.basename(normalized)
-            if base_name == "models.py":
-                refactored_files[file_path] = models_code
-            elif base_name == "payment_client.py":
-                refactored_files[file_path] = client_code
-
-        return {
-            "diagnosis": (
-                "Detected upstream breaking contract drift in POST /api/v2/payments/charge. "
-                "1. Field 'amount' (float) was replaced with integer 'amount_cents'. "
-                "2. Field 'customer_address' was moved to nested 'billing.address.line1'. "
-                "Synthesized backward-compatible Pydantic validator to map float dollars to cents "
-                "and nested billing address structure, eliminating 422 Unprocessable Entity failures."
-            ),
+            "diagnosis": diagnosis,
             "refactored_files": refactored_files
         }
 
     def generate_incident_delivery_artifacts(
         self,
         incident_id: str,
-        breaking_changes: List[Dict[str, Any]],
-        unified_diff: str,
+        vector_type: str,
+        incident_trigger: Dict[str, Any],
+        diagnosis: str,
+        changes_or_plan: Any,
+        unified_diff_or_ddl: str,
         sandbox_result: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Prompts Meta Muse Spark to author the GitHub PR title, PR description,
-        and enterprise post-mortem narrative dynamically.
+        Prompts Meta Muse Spark to dynamically author the GitHub Pull Request title,
+        PR summary, and complete Markdown Incident Post-Mortem for ANY vector (API or DB).
         """
         system_prompt = (
             "You are Aegis SRE's Incident Delivery Core powered by Meta Muse Spark. "
-            "Your task is to analyze the resolved incident, the unified code diff, and the sandbox verification logs, "
-            "and synthesize an enterprise Pull Request title, PR summary, and comprehensive Markdown Post-Mortem.\n"
+            "Given the incident trigger log, root-cause diagnosis, verified code diff or SQL DDL migration, "
+            "and sandbox verification telemetry, author a ready-to-merge GitHub Pull Request and Markdown Post-Mortem.\n"
             "Output STRICT JSON format:\n"
             "{\n"
-            '  "pr_title": "Conventional commit title (e.g. fix(contract): reconcile ...)",\n'
-            '  "pr_summary": "Concise bulleted summary of code refactors",\n'
-            '  "executive_summary": "High-level paragraph describing incident and automated resolution",\n'
-            '  "root_cause_analysis": "Technical explanation of contract drift and caller impact",\n'
-            '  "post_mortem_markdown": "Full Markdown document for the incident record"\n'
+            '  "pr_title": "Conventional commit title (e.g. fix(contract): ... or perf(db): ...)",\n'
+            '  "pr_summary": "Concise bulleted summary of the verified fix",\n'
+            '  "executive_summary": "High-level paragraph describing the outage trigger and autonomous resolution",\n'
+            '  "root_cause_analysis": "Detailed technical explanation",\n'
+            '  "post_mortem_markdown": "Complete Markdown post-mortem document including diff/DDL and sandbox verification proof"\n'
             "}"
         )
 
         user_prompt = {
             "incident_id": incident_id,
-            "breaking_changes": breaking_changes,
-            "unified_diff": unified_diff,
-            "sandbox_telemetry": {
-                "runner_type": sandbox_result.get("runner_type"),
-                "sandbox_id": sandbox_result.get("sandbox_id"),
-                "passed": sandbox_result.get("passed"),
-                "exit_code": sandbox_result.get("exit_code"),
-                "stdout_summary": sandbox_result.get("stdout", "")[:500]
-            }
+            "vector_type": vector_type,
+            "incident_trigger": incident_trigger,
+            "diagnosis": diagnosis,
+            "technical_findings": changes_or_plan,
+            "verified_patch": unified_diff_or_ddl,
+            "sandbox_verification": sandbox_result
         }
 
         if self.api_key and self.api_key != "MOCK":
             try:
                 return self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2))
             except Exception as e:
-                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using deterministic artifact synthesis.")
+                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local report generator.")
 
-        # Deterministic generation fallback for offline testing
-        return self._deterministic_artifact_synthesis(
-            incident_id, breaking_changes, unified_diff, sandbox_result
+        return self._fallback_artifact_synthesis(
+            incident_id, vector_type, incident_trigger, diagnosis, changes_or_plan, unified_diff_or_ddl, sandbox_result
         )
 
-    def _deterministic_artifact_synthesis(
+    def _fallback_artifact_synthesis(
         self,
         incident_id: str,
-        breaking_changes: List[Dict[str, Any]],
-        unified_diff: str,
+        vector_type: str,
+        incident_trigger: Dict[str, Any],
+        diagnosis: str,
+        changes_or_plan: Any,
+        unified_diff_or_ddl: str,
         sandbox_result: Dict[str, Any]
     ) -> Dict[str, Any]:
-        changes_summary = "\n".join(
-            [f"- **{c.get('type', 'CHANGE')}**: {c.get('description', '')}" for c in breaking_changes]
-        )
-        pr_title = f"fix(contract): resolve {incident_id} breaking schema changes"
-        pr_summary = (
-            "- Reconciled client models with upstream OpenAPI v2 contract\n"
-            "- Added backward-compatible payload normalizer\n"
-            f"- Verified in isolated {sandbox_result.get('runner_type', 'sandbox')} with exit code 0"
-        )
+        is_db = vector_type.upper() == "VECTOR_A_DB"
+        prefix = "perf(db)" if is_db else "fix(contract)"
+        service = incident_trigger.get("service", "production-service")
+        pr_title = f"{prefix}: autonomous remediation for {incident_id} on {service}"
+
         exec_summary = (
-            f"Automated alert {incident_id} detected upstream contract drift. "
-            "Aegis SRE intercepted schema breaking changes, mapped caller dependencies, and autonomously "
-            "refactored client models. The candidate patch was deterministically verified in an ephemeral sandbox."
-        )
-        rca = (
-            f"The upstream service deployed breaking changes to the API contract:\n{changes_summary}\n\n"
-            "Downstream clients sending legacy payload structures encountered 422 Unprocessable Entity rejections. "
-            "Aegis SRE reconciled data models to satisfy new upstream schema constraints while preserving backwards compatibility."
+            f"Incident `{incident_id}` was automatically triggered on `{service}` due to: "
+            f"`{incident_trigger.get('error_message', 'production anomaly')}`. "
+            f"Aegis SRE diagnosed the root cause, synthesized a non-breaking remediation patch, "
+            f"and deterministically verified the fix in an isolated sandbox before opening this PR."
         )
 
+        fence_lang = "sql" if is_db else "diff"
+        sandbox_summary = json.dumps(sandbox_result, indent=2)
+
         md = f"""# Incident Post-Mortem: {incident_id}
+**Service:** `{service}`  
+**Vector:** `{vector_type}`  
 **Remediation Engine:** Aegis SRE (Meta Muse Spark Core)  
-**Verification Environment:** `{sandbox_result.get('runner_type', 'EPHEMERAL_SANDBOX')}` (ID: `{sandbox_result.get('sandbox_id')}`)  
-**Sandbox Status:** `PASSED (Exit Code {sandbox_result.get('exit_code')})`  
+**Sandbox Gate Status:** `PASSED`  
 
 ---
 
-## 1. Executive Summary
+## 1. Triggering Outage Event
+```json
+{json.dumps(incident_trigger, indent=2)}
+```
+
+---
+
+## 2. Executive Summary
 {exec_summary}
 
 ---
 
-## 2. Root Cause Analysis
-{rca}
+## 3. Root Cause Analysis
+{diagnosis}
 
 ---
 
-## 3. Verified Unified Diff
-```diff
-{unified_diff}
+## 4. Verified Remediation Patch
+```{fence_lang}
+{unified_diff_or_ddl.strip()}
 ```
 
 ---
 
-## 4. Deterministic Verification Gate Proof
-```text
-{sandbox_result.get('stdout', '').strip()}
+## 5. Ephemeral Sandbox Verification Proof
+```json
+{sandbox_summary}
 ```
 """
         return {
             "pr_title": pr_title,
-            "pr_summary": pr_summary,
+            "pr_summary": exec_summary,
             "executive_summary": exec_summary,
-            "root_cause_analysis": rca,
+            "root_cause_analysis": diagnosis,
             "post_mortem_markdown": md
         }

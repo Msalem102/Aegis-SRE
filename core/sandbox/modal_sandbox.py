@@ -8,6 +8,8 @@ Falls back to isolated local tempfile sandbox if Modal credentials are not yet c
 from typing import Dict, Any, Optional
 import os
 import sys
+import base64
+import json
 import tempfile
 import shutil
 import subprocess
@@ -30,7 +32,7 @@ class EphemeralSandbox:
     def execute_test_suite(
         self,
         refactored_files: Dict[str, str],
-        test_path: str = "tests/test_payment_client.py"
+        test_path: str = "tests"
     ) -> Dict[str, Any]:
         """
         Executes verification in a cloud Modal Sandbox if credentials exist;
@@ -41,28 +43,38 @@ class EphemeralSandbox:
         return self._run_in_local_sandbox(refactored_files, test_path)
 
     def _run_in_modal_cloud(self, refactored_files: Dict[str, str], test_path: str) -> Dict[str, Any]:
-        """Runs the test suite inside a real ephemeral Modal Cloud Sandbox."""
+        """Runs the test suite inside a real ephemeral Modal Cloud Sandbox with mounted files."""
         try:
             app = modal.App.lookup("aegis-sre", create_if_missing=True)
             image = modal.Image.debian_slim().pip_install("pytest", "pydantic")
 
-            # Prepare files dictionary for Modal mount
+            # Collect repository files and overlay candidate patch
             mount_files = {}
-            for root, _, files in os.walk(self.repo_root):
+            for root, dirs, files in os.walk(self.repo_root):
+                dirs[:] = [d for d in dirs if d not in [".git", "__pycache__", ".pytest_cache", "node_modules"]]
                 for f in files:
-                    if f.endswith((".py", ".json", ".toml")):
+                    if f.endswith((".py", ".json", ".toml", ".yaml", ".yml")):
                         full_p = os.path.join(root, f)
-                        rel_p = os.path.relpath(full_p, self.repo_root)
+                        rel_p = os.path.relpath(full_p, self.repo_root).replace(os.sep, "/")
                         with open(full_p, "rb") as fp:
-                            mount_files[f"/root/repo/{rel_p.replace(os.sep, '/')}"] = fp.read()
+                            mount_files[rel_p] = base64.b64encode(fp.read()).decode("ascii")
 
-            # Overlay candidate patch
             for rel_p, content in refactored_files.items():
-                mount_files[f"/root/repo/{rel_p.replace(os.sep, '/')}"] = content.encode("utf-8")
+                norm_p = rel_p.replace(os.sep, "/")
+                mount_files[norm_p] = base64.b64encode(content.encode("utf-8")).decode("ascii")
 
-            # Create cloud sandbox
+            payload_b64 = base64.b64encode(json.dumps(mount_files).encode("utf-8")).decode("ascii")
+            bootstrap_code = (
+                "import os, json, base64, subprocess, sys; "
+                f"files = json.loads(base64.b64decode('{payload_b64}').decode('utf-8')); "
+                "os.makedirs('/tmp/repo', exist_ok=True); "
+                "[ (os.makedirs(os.path.dirname('/tmp/repo/' + k), exist_ok=True), open('/tmp/repo/' + k, 'wb').write(base64.b64decode(v))) for k, v in files.items() ]; "
+                f"res = subprocess.run([sys.executable, '-m', 'pytest', '/tmp/repo/{test_path}', '-v', '--tb=short'], cwd='/tmp/repo'); "
+                "sys.exit(res.returncode)"
+            )
+
             sb = modal.Sandbox.create(
-                "pytest", f"/root/repo/{test_path}", "-v",
+                "python", "-c", bootstrap_code,
                 image=image,
                 app=app,
                 timeout=60
@@ -102,8 +114,8 @@ class EphemeralSandbox:
                 with open(target_file, "w", encoding="utf-8") as f:
                     f.write(content)
 
-            test_file_path = os.path.join(dest_repo, test_path)
-            cmd = [self.python_interpreter, "-m", "pytest", test_file_path, "-v", "--tb=short"]
+            test_target = os.path.join(dest_repo, test_path)
+            cmd = [self.python_interpreter, "-m", "pytest", test_target, "-v", "--tb=short"]
 
             result = subprocess.run(
                 cmd,

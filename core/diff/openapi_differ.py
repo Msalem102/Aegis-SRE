@@ -154,13 +154,17 @@ class GeneralizedOpenAPIDiffer:
         newly_required = v2_required - v1_required
         for req_field in newly_required:
             full_path = f"{path_prefix}.{req_field}" if path_prefix else req_field
+            req_schema = v2_props.get(req_field, {})
+            leaf_paths = self._collect_required_leaf_paths(req_schema, full_path)
             changes.append({
                 "change_class": "BREAKING",
                 "type": "FIELD_NEWLY_REQUIRED",
                 "endpoint": endpoint,
                 "method": method,
                 "field_path": full_path,
-                "description": f"Field '{full_path}' is now strictly required by upstream contract."
+                "required_leaf_paths": leaf_paths,
+                "new_type": req_schema.get("type", "unknown"),
+                "description": f"Field '{full_path}' (leaf paths: {leaf_paths}) is now strictly required by upstream contract."
             })
 
         # 3. Check for removed properties or relocated properties
@@ -219,32 +223,51 @@ class GeneralizedOpenAPIDiffer:
 
         return changes
 
+    def _collect_required_leaf_paths(self, schema_node: Dict[str, Any], prefix: str) -> List[str]:
+        """Recursively collects all required leaf property paths under a schema node."""
+        if schema_node.get("type") != "object":
+            return [prefix]
+        props = schema_node.get("properties", {})
+        reqs = schema_node.get("required", list(props.keys()))
+        leaves = []
+        for r in reqs:
+            child_node = props.get(r, {})
+            leaves.extend(self._collect_required_leaf_paths(child_node, f"{prefix}.{r}"))
+        return leaves or [prefix]
+
     def _search_field_in_nested_objects(
         self, target_name: str, parent_props: Dict[str, Any], current_path: str = ""
     ) -> Optional[str]:
         """
-        Generic search for a field across nested object definitions.
-        Matches if the field name is present in sub-properties or matches common suffix/stem.
+        Generic search for a relocated field across nested object definitions.
+        Matches if the field name or its underscore tokens match a nested object or leaf property.
         """
+        target_tokens = [t for t in target_name.lower().split("_") if len(t) > 2]
+
         for prop_name, prop_def in parent_props.items():
             if prop_def.get("type") == "object":
                 child_props = prop_def.get("properties", {})
                 new_path = f"{current_path}.{prop_name}" if current_path else prop_name
 
-                # Direct match
+                # Direct match on leaf
                 if target_name in child_props:
                     return f"{new_path}.{target_name}"
 
-                # Suffix/stem match (e.g., address in billing.address or customer_address in billing.address.line1)
                 for child_key, child_val in child_props.items():
+                    child_full = f"{new_path}.{child_key}"
                     if child_val.get("type") == "object":
                         deep_match = self._search_field_in_nested_objects(
                             target_name, {child_key: child_val}, current_path=new_path
                         )
                         if deep_match:
                             return deep_match
-                    elif child_key in target_name or target_name in child_key:
-                        return f"{new_path}.{child_key}"
+                        # If the nested object key itself matches a token of target_name, resolve to its primary required leaf
+                        if child_key.lower() in target_tokens:
+                            leaves = self._collect_required_leaf_paths(child_val, child_full)
+                            if leaves:
+                                return leaves[0]
+                    elif child_key.lower() in target_tokens or target_name.lower() in child_key.lower():
+                        return child_full
 
         return None
 

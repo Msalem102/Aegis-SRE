@@ -1,18 +1,22 @@
 """
-Aegis SRE - Vector B Orchestration Runner.
-Executes the closed-loop autonomous incident remediation pipeline for API Contract Drift:
-1. Ingestion & Diffing
-2. Downstream Dependency Scanning
-3. Meta Muse Spark Synthesis
-4. Ephemeral Sandbox Verification Gate
-5. GitHub Pull Request & Post-Mortem Delivery
+Aegis SRE - Vector B Orchestration Runner (Error-Activated, Self-Healing, 100% Generic).
+Workflow:
+1. Outage Activation: Downstream service suffers runtime API failure (HTTP 4xx/5xx error & stack trace),
+   which triggers and activates the Aegis SRE agent.
+2. Contract Diffing: Agent inspects upstream API specification changes and computes a structural AST diff.
+3. Dependency Mapping: Agent scans the downstream repository to isolate impacted models and callers.
+4. Self-Healing Sandbox Loop (Max 3 Attempts):
+   - Meta Muse Spark synthesizes code refactors from the error log + schema diff + source files.
+   - Ephemeral Sandbox (Modal Cloud / isolated container) runs the integration test suite.
+   - If tests fail, traceback is fed back into Meta Muse Spark to self-correct.
+5. Delivery: Meta Muse Spark authors the full Incident Post-Mortem report and opens a ready-to-merge GitHub PR.
 """
 
 import sys
 import os
 import json
+from typing import Dict, Any, Optional
 
-# Ensure UTF-8 console output on Windows
 if sys.stdout.encoding != "utf-8":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -27,119 +31,148 @@ from core.sandbox.test_runner import apply_verified_patch_to_repo
 from core.delivery.github_delivery import GitHubDeliveryEngine
 
 
-def run_vector_b_remediation():
-    print("=" * 75)
-    print("🚀 AEGIS SRE: Autonomous Incident Remediation Agent (Vector B)")
-    print("=" * 75)
+def run_vector_b_remediation(
+    v1_spec_path: str = "scenarios/vector_b_contract/upstream/openapi_v1.json",
+    v2_spec_path: str = "scenarios/vector_b_contract/upstream/openapi_v2_breaking.json",
+    client_repo_path: str = "scenarios/vector_b_contract/client_repo",
+    test_target: str = "tests",
+    max_retries: int = 3
+) -> Dict[str, Any]:
+    print("=" * 78)
+    print("🚨 AEGIS SRE: Autonomous API Contract Drift Remediation (Vector B)")
+    print("=" * 78)
 
-    v1_spec_path = "scenarios/vector_b_contract/upstream/openapi_v1.json"
-    v2_spec_path = "scenarios/vector_b_contract/upstream/openapi_v2_breaking.json"
-    client_repo_path = "scenarios/vector_b_contract/client_repo"
     interpreter_path = sys.executable
+    sandbox = EphemeralSandbox(client_repo_path, python_interpreter=interpreter_path)
 
     # -------------------------------------------------------------
-    # Step 1: Upstream Contract Drift Ingestion & AST Diff
+    # Step 1: Outage Detection & Error-Driven Agent Activation
     # -------------------------------------------------------------
-    print("\n[Step 1] Ingesting Upstream Contract Drift & Computing AST Diff...")
+    print("\n[Step 1] Live Outage Detected -> Capturing Runtime Error & Activating Agent...")
+    baseline_run = sandbox.execute_test_suite({}, test_path=test_target)
+    if baseline_run["passed"]:
+        print(" ⚠️ No active contract outage detected (all tests currently passing).")
+        return {"status": "NO_OUTAGE_DETECTED"}
+
+    error_lines = [
+        line.strip() for line in (baseline_run["stdout"] + "\n" + baseline_run["stderr"]).splitlines()
+        if any(tok in line for tok in ["ValueError", "AssertionError", "422", "400", "Error", "FAILED"])
+    ]
+    incident_error_log = {
+        "incident_id": "INC-20261028-API-01",
+        "service": os.path.basename(os.path.abspath(client_repo_path)),
+        "http_status": 422,
+        "error_message": " | ".join(error_lines[:3]) if error_lines else "Upstream API contract validation failure",
+        "raw_traceback": baseline_run["stdout"][-1200:]
+    }
+    print(f" ❌ Outage Triggered [{incident_error_log['incident_id']}]:")
+    print(f"    {incident_error_log['error_message']}")
+    print(" ⚡ Aegis SRE Agent Activated!")
+
+    # -------------------------------------------------------------
+    # Step 2: Upstream OpenAPI Spec Inspection & Structural Diff
+    # -------------------------------------------------------------
+    print("\n[Step 2] Inspecting Upstream API Specifications & Computing Structural Diff...")
     diff_result = diff_specs_from_files(v1_spec_path, v2_spec_path)
     breaking_changes = diff_result["breaking_changes"]
-    print(f" -> Detected {len(breaking_changes)} breaking schema changes:")
+    print(f" -> Diffed '{diff_result['v1_title']}' ({diff_result['v1_version']} -> {diff_result['v2_version']})")
+    print(f" -> Isolated {len(breaking_changes)} structural contract changes:")
     for change in breaking_changes:
         print(f"    • [{change['type']}] {change.get('description', '')}")
 
     # -------------------------------------------------------------
-    # Step 2: Downstream Static Dependency Mapping
+    # Step 3: Downstream Dependency Mapping
     # -------------------------------------------------------------
-    print("\n[Step 2] Scanning Downstream Client Repository...")
+    print("\n[Step 3] Scanning Downstream Repository for Impacted Callers & Models...")
     mapper = DependencyMapper(client_repo_path)
     dep_result = mapper.map_affected_components(breaking_changes)
     target_files = dep_result["target_files"]
-    print(f" -> Isolated {len(target_files)} target source files:")
-    for fpath in target_files.keys():
-        print(f"    • {fpath}")
+    print(f" -> Mapped {len(target_files)} impacted files: {list(target_files.keys())}")
 
     # -------------------------------------------------------------
-    # Step 3: Verify Pre-Remediation Baseline (Assert Failure)
+    # Step 4: Closed-Loop Synthesis & Ephemeral Sandbox Verification (Max 3 Loops)
     # -------------------------------------------------------------
-    print("\n[Step 3] Executing Baseline Test Suite in Isolated Sandbox...")
-    sandbox = EphemeralSandbox(client_repo_path, python_interpreter=interpreter_path)
-    baseline_run = sandbox.execute_test_suite({}) # empty patch = current codebase
-    if not baseline_run["passed"]:
-        print(f" ❌ Baseline Status: TESTS FAILING (Exit Code {baseline_run['exit_code']}) - Incident Active!")
-        print(f"    Runner Environment: {baseline_run['runner_type']} ({baseline_run['sandbox_id']})")
-        first_err_line = [line for line in baseline_run["stdout"].splitlines() if "ValueError" in line or "FAILED" in line]
-        print(f"    Error: {' | '.join(first_err_line[:2])}")
-    else:
-        print(" ⚠️ Warning: Baseline unexpectedly passed.")
-
-    # -------------------------------------------------------------
-    # Step 4: Meta Muse Spark Reasoning & Code Synthesis
-    # -------------------------------------------------------------
-    print("\n[Step 4] Prompting Meta Muse Spark for AST Remediation...")
     muse = MuseSparkClient()
-    synthesis = muse.synthesize_contract_refactor(breaking_changes, target_files)
-    print(f" -> Muse Spark Diagnosis:\n    \"{synthesis['diagnosis']}\"")
-    refactored_files = synthesis["refactored_files"]
-    print(f" -> Synthesized patches for {len(refactored_files)} files.")
+    last_sandbox_error: Optional[str] = None
+    verified_synthesis: Optional[Dict[str, Any]] = None
+    verified_sandbox_result: Optional[Dict[str, Any]] = None
 
-    # -------------------------------------------------------------
-    # Step 5: Ephemeral Sandbox Verification Gate
-    # -------------------------------------------------------------
-    print("\n[Step 5] Deterministic Sandbox Gate: Testing Candidate Patch...")
-    sandbox_result = sandbox.execute_test_suite(refactored_files)
+    for attempt in range(1, max_retries + 1):
+        print(f"\n[Step 4.{attempt}] Meta Muse Spark Synthesis & Sandbox Verification (Attempt {attempt}/{max_retries})...")
+        synthesis = muse.synthesize_contract_refactor(
+            incident_error_log=incident_error_log,
+            breaking_changes=breaking_changes,
+            affected_files=target_files,
+            previous_errors=last_sandbox_error
+        )
+        refactored_files = synthesis.get("refactored_files", {})
+        print(f" -> Diagnosis: \"{synthesis.get('diagnosis', '')}\"")
+        print(f" -> Synthesized candidate patch across {len(refactored_files)} file(s): {list(refactored_files.keys())}")
 
-    if sandbox_result["passed"]:
-        print(f" ✅ Deterministic Gate: PASSED (Exit Code {sandbox_result['exit_code']})")
-        print(f"    Runner Environment: {sandbox_result['runner_type']} ({sandbox_result['sandbox_id']})")
-        print(f"    All integration tests passed successfully.")
-    else:
-        print(f" ❌ Deterministic Gate: FAILED (Exit Code {sandbox_result['exit_code']})")
-        print(sandbox_result["stdout"])
-        print(sandbox_result["stderr"])
+        sandbox_result = sandbox.execute_test_suite(refactored_files, test_path=test_target)
+        if sandbox_result["passed"]:
+            print(f" ✅ Deterministic Sandbox Gate PASSED on Attempt {attempt} (Exit Code 0)!")
+            print(f"    Environment: {sandbox_result['runner_type']} ({sandbox_result['sandbox_id']})")
+            verified_synthesis = synthesis
+            verified_sandbox_result = sandbox_result
+            break
+        else:
+            last_sandbox_error = sandbox_result["stdout"] + "\n" + sandbox_result["stderr"]
+            print(f" ❌ Sandbox Attempt {attempt} Failed (Exit Code {sandbox_result['exit_code']}). Feeding traceback back to Muse Spark...")
+
+    if not verified_synthesis or not verified_sandbox_result:
+        print("\n🚨 Sandbox Mandate Enforced: Patch failed after maximum retries. Escalating to human on-call.")
         sys.exit(1)
 
     # -------------------------------------------------------------
-    # Step 6: Artifact Delivery - Model-Authored PR & Post-Mortem
+    # Step 5: Model-Authored Report & Ready-to-Merge GitHub PR
     # -------------------------------------------------------------
-    print("\n[Step 6] Synthesizing Pull Request & Enterprise Post-Mortem with Meta Muse Spark...")
+    print("\n[Step 5] Generating Incident Report & Ready-to-Merge Pull Request...")
     delivery = GitHubDeliveryEngine()
-    unified_diff = delivery.generate_diff(target_files, refactored_files)
-    
-    # Prompt Muse Spark to author the complete PR and Post-Mortem
-    incident_id = "INC-20261027-API-01"
+    unified_diff = delivery.generate_diff(target_files, verified_synthesis["refactored_files"])
+
+    incident_id = incident_error_log["incident_id"]
     artifacts = muse.generate_incident_delivery_artifacts(
         incident_id=incident_id,
-        breaking_changes=breaking_changes,
-        unified_diff=unified_diff,
-        sandbox_result=sandbox_result
+        vector_type="VECTOR_B_API_CONTRACT",
+        incident_trigger=incident_error_log,
+        diagnosis=verified_synthesis["diagnosis"],
+        changes_or_plan=breaking_changes,
+        unified_diff_or_ddl=unified_diff,
+        sandbox_result=verified_sandbox_result
     )
 
-    # Save model-generated post-mortem
     post_mortem_file = f"POST_MORTEM_{incident_id.replace('-', '_')}.md"
     with open(post_mortem_file, "w", encoding="utf-8") as f:
         f.write(artifacts["post_mortem_markdown"])
-    print(f" -> Authored Enterprise Post-Mortem: {post_mortem_file}")
+    print(f" -> Saved Incident Post-Mortem Report: {post_mortem_file}")
 
-    # Generate PR
     pr = delivery.create_pull_request(
-        repo="meta-sre/payment-client",
+        repo=f"meta-sre/{incident_error_log['service']}",
         branch_name=f"aegis/remediate-{incident_id.lower()}",
         pr_title=artifacts["pr_title"],
         pr_body=artifacts["post_mortem_markdown"]
     )
-    print(f" -> Generated GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
-    print(f"    PR Link: {pr['html_url']}")
-    print(f"    Status: {pr.get('status', 'SUCCESS')}")
+    print(f" -> Opened Ready-to-Merge GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
+    print(f"    PR URL: {pr['html_url']}")
 
-    # Apply verified patch only if explicitly requested via argument
     if "--apply" in sys.argv:
-        apply_verified_patch_to_repo(client_repo_path, refactored_files)
-        print(" -> Applied verified patch to client repository files.")
-    else:
-        print(" -> Sandbox Mandate preserved: client repository left in clean reproducible outage state (use --apply to write to disk).")
+        apply_verified_patch_to_repo(client_repo_path, verified_synthesis["refactored_files"])
+        print(" -> Applied verified patch to repository.")
 
-    print("\n🎉 Incident Remediation Complete! All systems verified green.")
-    print("=" * 75)
+    print("\n🎉 Vector B Autonomous Remediation Complete!")
+    print("=" * 78)
+
+    return {
+        "incident_id": incident_id,
+        "trigger": incident_error_log,
+        "breaking_changes": breaking_changes,
+        "diagnosis": verified_synthesis["diagnosis"],
+        "unified_diff": unified_diff,
+        "sandbox_result": verified_sandbox_result,
+        "pr": pr,
+        "post_mortem_markdown": artifacts["post_mortem_markdown"]
+    }
 
 
 if __name__ == "__main__":
