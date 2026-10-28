@@ -7,6 +7,8 @@
     "metric": "p99_latency_ms",
     "threshold": 1500.0,
     "current_value": 3580.0,
+    "host_cpu_percent": 94.2,
+    "cpu_threshold_percent": 80.0,
     "severity": "CRITICAL"
   },
   "pg_stat_statements_summary": {

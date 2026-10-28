@@ -54,15 +54,20 @@ def run_vector_a_remediation(
     )
     sample_params = alert_payload.get("sample_params", [42819, "completed", 50])
 
+    anomaly = alert_payload.get("anomaly_trigger", {})
+    cpu_percent = anomaly.get("host_cpu_percent", 94.2)
+    p99_latency = anomaly.get("current_value", 3580.0)
+
     outage_alert = {
         "incident_id": incident_id,
         "service": service,
-        "error_code": "HTTP_504_GATEWAY_TIMEOUT / PG_SLOW_QUERY_BREACH",
+        "error_code": "CRITICAL_CPU_SPIKE / PG_SLOW_QUERY_BREACH",
         "error_message": (
-            f"P99 query latency spiked to {alert_payload.get('anomaly_trigger', {}).get('current_value', 3580.0)}ms "
-            f"(threshold: {alert_payload.get('anomaly_trigger', {}).get('threshold', 1500.0)}ms)"
+            f"Host CPU surged to {cpu_percent}% (threshold: 80.0%) and P99 latency spiked to {p99_latency}ms "
+            f"(threshold: {anomaly.get('threshold', 1500.0)}ms)"
         ),
-        "offending_query": offending_query
+        "offending_query": offending_query,
+        "host_cpu_percent": cpu_percent
     }
 
     # -------------------------------------------------------------
@@ -70,7 +75,8 @@ def run_vector_a_remediation(
     # -------------------------------------------------------------
     print(f"\n[Step 1] Outage Alert Received [{incident_id}] -> Activating Aegis SRE Agent...")
     print(f" -> Service: {service}")
-    print(f" -> Trigger: {outage_alert['error_code']} — {outage_alert['error_message']}")
+    print(f" -> Telemetry Breach: CPU = {cpu_percent}% | P99 Latency = {p99_latency}ms")
+    print(f" -> Trigger Details: {outage_alert['error_message']}")
     print(f" -> Offending SQL: \"{offending_query}\"")
 
     # -------------------------------------------------------------

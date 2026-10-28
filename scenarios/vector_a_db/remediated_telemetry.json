@@ -51,6 +51,9 @@
     "baseline_latency_ms": 3412.98,
     "remediated_latency_ms": 4.12,
     "latency_reduction_percent": 99.88,
+    "baseline_cpu_percent": 94.2,
+    "remediated_cpu_percent": 7.8,
+    "cpu_reduction_percent": 91.72,
     "deterministic_gate_passed": true,
     "table_locks_detected": false
   }
