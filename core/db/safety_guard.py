@@ -10,6 +10,13 @@ Enforces the Aegis SRE Production Safety Mandate:
 from typing import Dict, Any, List, Tuple
 import re
 
+try:
+    import sqlglot
+    from sqlglot import exp
+    SQLGLOT_AVAILABLE = True
+except ImportError:
+    SQLGLOT_AVAILABLE = False
+
 
 class DDLSafetyGuard:
     DESTRUCTIVE_PATTERNS = [
@@ -25,21 +32,40 @@ class DDLSafetyGuard:
     @classmethod
     def validate_ddl(cls, ddl_script: str) -> Tuple[bool, List[str]]:
         """
-        Validates synthesized DDL statements against enterprise safety policies.
+        Validates synthesized DDL statements against enterprise safety policies
+        using typed SQL AST parsing (sqlglot) with regex fallback.
         Returns (is_valid, violation_reasons).
         """
         violations = []
         normalized_script = ddl_script.strip().upper()
 
-        # 1. Check for destructive operations
+        # 1. Check for destructive operations using typed AST if available
+        if SQLGLOT_AVAILABLE:
+            try:
+                parsed_statements = sqlglot.parse(ddl_script, read="postgres")
+                for stmt in parsed_statements:
+                    if stmt is None:
+                        continue
+                    # Check for Drop, Truncate, Delete, Update AST expressions
+                    if isinstance(stmt, (exp.Drop, exp.Truncate, exp.Delete, exp.Update)):
+                        violations.append(f"Hard-blocked destructive AST statement: {type(stmt).__name__}")
+                    # Also check for nested destructive commands
+                    if stmt.find(exp.Drop) or stmt.find(exp.Truncate):
+                        violations.append("Hard-blocked destructive DROP/TRUNCATE operation within AST tree.")
+            except Exception:
+                # Fallback to regex check if sqlglot parse fails on session variables
+                pass
+
+        # Also verify with regex guardrails
         for pattern in cls.DESTRUCTIVE_PATTERNS:
             if re.search(pattern, normalized_script, re.IGNORECASE):
-                violations.append(f"Hard-blocked destructive statement matching pattern: {pattern}")
+                reason = f"Hard-blocked destructive statement matching pattern: {pattern}"
+                if reason not in violations:
+                    violations.append(reason)
 
         # 2. Check if creating index without CONCURRENTLY
         create_index_matches = re.finditer(r"\bCREATE\s+(?:UNIQUE\s+)?INDEX\b", normalized_script, re.IGNORECASE)
         for match in create_index_matches:
-            # Check if CONCURRENTLY immediately follows CREATE [UNIQUE] INDEX
             snippet = normalized_script[match.start():match.start() + 40]
             if "CONCURRENTLY" not in snippet:
                 violations.append("Violation: Index creation must include 'CONCURRENTLY' to prevent production table locks.")

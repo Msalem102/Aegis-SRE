@@ -9,6 +9,7 @@ from typing import Dict, Any, List, Optional
 import os
 import json
 import re
+import time
 import httpx
 from dotenv import load_dotenv
 from core.telemetry.cost_tracker import CostTracker
@@ -118,15 +119,19 @@ class MuseSparkClient:
             "response_format": {"type": "json_object"}
         }
 
+        print(f"   🧠 [Meta Model API] Dispatching live prompt to '{self.model_name}' at {self.base_url}...")
+        start_t = time.perf_counter()
         with httpx.Client(timeout=60.0) as client:
             resp = client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
+            elapsed = round(time.perf_counter() - start_t, 2)
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
             usage = data.get("usage", {})
             p_tokens = usage.get("prompt_tokens", self.cost_tracker.estimate_tokens_from_text(system_prompt + user_prompt))
             c_tokens = usage.get("completion_tokens", self.cost_tracker.estimate_tokens_from_text(content))
             self.cost_tracker.record_usage(p_tokens, c_tokens, task_name=task_name)
+            print(f"   🧠 [Meta Model API] Response received in {elapsed}s | Tokens: {p_tokens} prompt + {c_tokens} completion")
 
             if content.startswith("```"):
                 lines = content.strip().split("\n")

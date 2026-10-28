@@ -1,48 +1,54 @@
-# Post-Mortem: INC-20261027-DB-01 — Critical CPU & P99 Latency Breach on orders-checkout-api
+# Post-Mortem: INC-20261027-DB-01 — Sequential Scan CPU Spike on orders-checkout-api
 
 **Incident ID:** INC-20261027-DB-01  
-**Vector Type:** VECTOR_A_DB  
+**Vector:** VECTOR_A_DB  
 **Service:** orders-checkout-api  
-**Severity:** Critical (SEV-1)  
+**Severity:** Critical (CRITICAL_CPU_SPIKE / PG_SLOW_QUERY_BREACH)  
 **Date:** 2026-10-27  
-**Error Code:** CRITICAL_CPU_SPIKE / PG_SLOW_QUERY_BREACH  
-**Sandbox Verification ID:** aegis_db_sandbox_0azm3apy (LOCAL_EPHEMERAL_DB_CLONE)
+**Sandbox:** MODAL_CLOUD_DB_SANDBOX (`aegis_db_sandbox_fc8l4k2k`)  
+**Status:** Verified Fix Ready to Merge
 
-## Executive Summary
-Host CPU surged to **94.2%** (threshold 80.0%) and P99 latency spiked to **3580.0ms** (threshold 1500.0ms) on `orders-checkout-api`. Root cause was a missing index on `orders` forcing a sequential scan + external sort for a high-frequency checkout query. An autonomous covering index was generated and sandbox-verified, reducing production-equivalent latency by **98.98%** (1419.99ms → 14.43ms) and CPU by **91.08%** (94.2% → 8.4%) with zero table locks.
+## 1. Executive Summary
 
-## Impact
-- **Service:** orders-checkout-api checkout flow degraded
-- **CPU:** 94.2% host CPU (14.2pp over threshold) — risk of cascading failures and throttling
-- **Latency:** P99 3580ms (2.38x over 1500ms SLO) — user-visible checkout timeouts
-- **Query:** `SELECT id, user_id, status, total_amount, created_at FROM orders WHERE user_id = $1 AND status = $2 ORDER BY created_at DESC LIMIT $3` executed per checkout/history fetch
-- **Blast Radius:** All users querying order history by status; amplified under concurrent load
+Host CPU surged to **94.2%** (threshold 80.0%) and P99 latency spiked to **3580.0ms** (threshold 1500.0ms) on `orders-checkout-api`. Root cause was a missing index on `orders` forcing a full Sequential Scan + Temp B-Tree sort for every execution of the checkout history query. An autonomous covering index was generated and verified in sandbox, reducing production-equivalent latency by **99.03%** (1559.86ms → 15.12ms) and CPU by **91.08%** (94.2% → 8.4%) with zero table locks. No application code change required.
 
-## Timeline (UTC)
-- **T+0 — Detection:** Alert fired: CPU 94.2%, P99 3580ms on orders-checkout-api
-- **T+1 — Triage:** Offending query isolated; `EXPLAIN` shows `SCAN orders` + `USE TEMP B-TREE FOR ORDER BY`
-- **T+2 — Diagnosis:** Confirmed 0 indexes on `orders`; 100k rows scanned → 40 returned (2500x amplification)
-- **T+3 — Patch Synthesis:** Generated covering index DDL with CONCURRENTLY and timeout guards
-- **T+4 — Sandbox Verification:** Applied DDL in `aegis_db_sandbox_0azm3apy`; verified plan conversion and metrics
-- **T+5 — Ready to Merge:** PR prepared for zero-downtime production rollout
+## 2. Incident Trigger
 
-## Root Cause Analysis
-**Missing B-Tree index on `orders(user_id, status, created_at)`**
+- **Error Code:** `CRITICAL_CPU_SPIKE / PG_SLOW_QUERY_BREACH`
+- **Host CPU:** 94.2%
+- **P99 Latency:** 3580.0ms
+- **Offending Query:**
+```sql
+SELECT id, user_id, status, total_amount, created_at
+FROM orders
+WHERE user_id = $1 AND status = $2
+ORDER BY created_at DESC
+LIMIT $3;
+-- params: [42819, 'completed', 50]
+```
 
-- **Table State:** `orders` had 0 existing indexes.
-- **Planner Behavior (Before):**
-  ```
-  SCAN orders
-  USE TEMP B-TREE FOR ORDER BY
-  ```
-  Sequential scan filtering on `user_id = 42819 AND status = 'completed'`, then external sort of all matches by `created_at DESC` before `LIMIT 50`.
-- **Amplification:** `rows_scanned_estimate: 100,000` vs `rows_returned: 40` = **2500x amplification (99.96% wasted)**.
-- **Cost Model:** O(N log N) per query — full heap page reads (high shared_buffers I/O) + CPU-intensive sort. Measured local 11.833ms → production-equivalent 1419.99ms, breaching P99.
-- **Concurrency Effect:** Under checkout API load, repeated full scans saturate CPU and drive latency breach to 3580ms observed.
-- **Why No Index Helped:** No B-Tree could support equality predicates (`user_id`, `status`) or provide pre-sorted order (`created_at DESC`), nor cover the `SELECT` projection.
+## 3. Root Cause Analysis
 
-## Resolution — Verified Patch (DDL)
-Zero-downtime, idempotent DDL with lock/timeout guards:
+**Diagnosis:** Sequential Scan on `orders` with no usable index.
+
+- **Existing Indexes:** `[]` — none usable for this query
+- **Planner Before:** `SCAN orders` → `USE TEMP B-TREE FOR ORDER BY`
+- **Rows Scanned (est.):** 100,000
+- **Rows Returned:** 40
+- **Selectivity:** 0.04% (2500:1 read amplification)
+- **Measured Local Latency:** 12.999ms → **Production Equivalent:** 1559.86ms (exceeds 1500ms threshold)
+
+The query filters on two equality predicates (`user_id = $1 AND status = $2`) but must scan the entire heap. After filtering, all matching rows must be sorted in memory to satisfy `ORDER BY created_at DESC` before `LIMIT 50` can be applied. This Seq Scan + Sort pattern is CPU and I/O intensive and was executed on the hot checkout path, causing sustained CPU saturation and P99 breach. No index existed to support the filter or provide index-ordered sort, forcing heap scan + external sort on every call.
+
+## 4. Impact
+
+- Checkout API P99 breached SLO by 2.38x (3580ms vs 1500ms threshold)
+- Host CPU 14.2 points over critical threshold, risking cascade to other queries on same host
+- Every execution wasted ~99.96% of read I/O (100k scanned for 40 needed)
+
+## 5. Resolution — Verified Patch (DDL)
+
+**Strategy:** Composite covering B-Tree index matching query pattern exactly: equality columns first, then sort column DESC, with INCLUDE for covering.
 
 ```sql
 SET statement_timeout = '30s';
@@ -52,65 +58,56 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_user_id_status_created_at
   INCLUDE (id, total_amount);
 ```
 
-**Design Rationale:**
-- **Column Order `(user_id, status, created_at DESC)`:** Matches equality predicates left-to-right (`user_id=? AND status=?`) and provides pre-sorted order for `ORDER BY created_at DESC`, eliminating sort. `DESC` aligns with query sort direction for optimal `LIMIT` pushdown.
-- **`INCLUDE (id, total_amount)`:** Makes index **covering** for `SELECT id, user_id, status, total_amount, created_at` — enables Index-Only/Covering Index Scan without heap fetches (all selected columns are in index key or INCLUDE).
-- **`CONCURRENTLY` + `IF NOT EXISTS`:** Avoids `ACCESS EXCLUSIVE` lock; allows concurrent reads/writes. Idempotent for safe re-runs.
-- **Timeouts:** `statement_timeout='30s'` and `lock_timeout='5s'` prevent long blocking in production.
+**Why this shape:**
+- `(user_id, status)` — supports both equality predicates with single index seek
+- `created_at DESC` — provides pre-sorted order, eliminates Temp B-Tree sort; `LIMIT 50` can be satisfied via index scan without sorting
+- `INCLUDE (id, total_amount)` — makes index **covering** for `SELECT id, user_id, status, total_amount, created_at`; all columns served from index, no heap fetches
+- `CONCURRENTLY` + `IF NOT EXISTS` + timeouts — zero-downtime build, no table locks, idempotent
 
-**Planner Behavior (After):**
-```
-SEARCH orders USING COVERING INDEX idx_orders_user_id_status_created_at (user_id=? AND status=?)
-```
-Converted to covering index scan — no temp B-Tree, no heap scan.
+**Applied DDL (Sandbox Verified):** Identical to above, executed in `aegis_db_sandbox_fc8l4k2k`.
 
-## Sandbox Verification Proof
-**Environment:** LOCAL_EPHEMERAL_DB_CLONE (`aegis_db_sandbox_0azm3apy`)  
+## 6. Sandbox Verification Proof
+
+**Environment:** MODAL_CLOUD_DB_SANDBOX  
 **Deterministic Gate:** PASSED  
 **Table Locks Detected:** false
 
-| Metric | Baseline (Before) | Remediated (After) | Delta |
+| Metric | Before | After | Delta |
 |---|---|---|---|
-| **Local Latency** | 11.833 ms | 0.1202 ms | **-98.98%** |
-| **Production-Equivalent Latency** | 1419.99 ms | 14.43 ms | **-98.98%** |
+| **Plan Nodes** | `SCAN orders` + `USE TEMP B-TREE FOR ORDER BY` | `SEARCH orders USING COVERING INDEX idx_orders_user_id_status_created_at (user_id=? AND status=?)` | Converted to Index Scan |
+| **Local Latency** | 12.999 ms | 0.126 ms | **-99.03%** |
+| **Prod-Equivalent P99** | 1559.86 ms | 15.12 ms | **-99.03%** (well below 1500ms threshold) |
 | **Host CPU** | 94.2% | 8.4% | **-91.08%** |
-| **Plan Nodes (Before)** | SCAN orders + USE TEMP B-TREE FOR ORDER BY | — | Seq Scan + Sort |
-| **Plan Nodes (After)** | — | SEARCH orders USING COVERING INDEX idx_orders_user_id_status_created_at | Covering Index Scan |
+| **Is Covering Index Scan** | false | **true** | Heap fetches eliminated |
 | **Rows Returned** | 40 | 40 | Correctness preserved |
-| **Rows Scanned (est.)** | 100,000 | ~40 (index seek) | 2500x amplification eliminated |
-| **Converted to Index Scan** | — | true | ✅ |
-| **Is Covering Index Scan** | — | true | ✅ (no heap fetch) |
-| **P99 Threshold (1500ms)** | 3580ms BREACH | 14.43ms PASS | SLO restored |
-| **CPU Threshold (80%)** | 94.2% BREACH | 8.4% PASS | SLO restored |
+| **Error** | null | null | Clean execution |
 
-**Verification Details:**
-- `applied_ddl` matches verified patch exactly
-- `before_plan_nodes: ["SCAN orders", "USE TEMP B-TREE FOR ORDER BY"]`
-- `after_plan_nodes: ["SEARCH orders USING COVERING INDEX idx_orders_user_id_status_created_at (user_id=? AND status=?)"]`
-- `error: null`, `deterministic_gate_passed: true`
+**Key Evidence:**
+- `converted_to_index_scan: true`
+- `is_covering_index_scan: true`
+- `after_plan_nodes: ["SEARCH orders USING COVERING INDEX idx_orders_user_id_status_created_at (user_id=? AND status=?)"]` — sort eliminated, index provides ordering
+- No regression in row count; deterministic gate passed
 
-## Lessons Learned
-1. **High-cardinality filter + sort + limit without index is catastrophic:** Even with LIMIT 50, Postgres must scan and sort all matches without an index that supports both predicate and order.
-2. **Covering indexes matter for checkout path:** INCLUDE avoids heap lookups and maximizes Index-Only Scan benefit for latency-sensitive API.
-3. **Zero indexes on hot table is a deployment gap:** `orders` is core to checkout; schema review should enforce index coverage for top queries.
-4. **CONCURRENTLY is mandatory for hot tables:** Prevents downtime on large `orders` table during index build.
+## 7. Risk & Safety
 
-## Action Items
-| Action | Owner | Priority |
-|---|---|---|
-| Merge and deploy `idx_orders_user_id_status_created_at` CONCURRENTLY to production | DB SRE | P0 |
-| Add pg_stat_statements monitoring + alert on Seq Scan + Sort for top 20 queries | SRE | P1 |
-| Audit `orders` table for other missing indexes (e.g., `created_at` range queries) | Backend | P1 |
-| Add CI check: `EXPLAIN` gate fails PR if Seq Scan on >10k row table for filtered queries | Platform | P2 |
-| Document covering index pattern for `WHERE equality + ORDER BY + LIMIT` queries | DB SRE | P2 |
+- `CREATE INDEX CONCURRENTLY` avoids `ACCESS EXCLUSIVE` lock; verified `table_locks_detected: false`
+- `statement_timeout` / `lock_timeout` prevent runaway DDL
+- `IF NOT EXISTS` ensures idempotency on retry
+- Covering index adds write overhead (~1 index) but read amplification reduction (2500:1 → ~1:1) far outweighs cost for read-heavy checkout path
+- Index size impact minimal vs. 100k row table; INCLUDE columns are narrow
 
-## Appendix — Full DDL Diff
-```diff
-+ SET statement_timeout = '30s';
-+ SET lock_timeout = '5s';
-+ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_user_id_status_created_at
-+   ON orders (user_id, status, created_at DESC)
-+   INCLUDE (id, total_amount);
-```
+## 8. Lessons Learned
 
+1. Equality + ORDER BY + LIMIT queries require composite index with sort column to avoid sort spill.
+2. Missing covering indexes on hot paths cause disproportionate CPU via sort, not just I/O.
+3. Autonomous EXPLAIN plan diff (SCAN → SEARCH USING COVERING INDEX) is definitive proof of fix.
+
+## 9. Action Items
+
+- [ ] Merge and deploy DDL to production (CONCURRENTLY, off-peak recommended but safe online)
+- [ ] Monitor P99 and CPU for 24h post-deploy; expect sustained <20ms P99 for this query
+- [ ] Audit other `orders` queries for similar missing index patterns (status, user_id combinations)
+- [ ] Add CI check for sequential scans on tables >50k rows in slow query log
+
+---
 *Generated by Aegis SRE Incident Delivery Core (Meta Muse Spark) — Sandbox Verified, Ready to Merge.*

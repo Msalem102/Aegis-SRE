@@ -15,6 +15,9 @@ import shutil
 import sqlite3
 import tempfile
 import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     import modal

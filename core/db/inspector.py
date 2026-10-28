@@ -120,9 +120,21 @@ class ReadOnlyDatabaseInspector:
         conn = sqlite3.connect(ro_uri, uri=True)
         cur = conn.cursor()
 
-        # Extract target table name from SQL query
-        table_match = re.search(r"\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)", offending_query, re.I)
-        table_name = table_match.group(1) if table_match else "unknown_table"
+        # Extract target table name from SQL query via sqlglot AST parser (with regex fallback)
+        table_name = "unknown_table"
+        try:
+            import sqlglot
+            from sqlglot import exp
+            parsed = sqlglot.parse_one(offending_query, read="postgres")
+            tables = [t.name for t in parsed.find_all(exp.Table) if t.name]
+            if tables:
+                table_name = tables[0]
+        except Exception:
+            pass
+
+        if table_name == "unknown_table":
+            table_match = re.search(r"\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)", offending_query, re.I)
+            table_name = table_match.group(1) if table_match else "unknown_table"
 
         # 1. Read table catalog
         cur.execute(f"PRAGMA table_info({table_name})")

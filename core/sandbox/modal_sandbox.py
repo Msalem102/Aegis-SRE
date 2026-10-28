@@ -13,6 +13,10 @@ import json
 import tempfile
 import shutil
 import subprocess
+import time
+from dotenv import load_dotenv
+
+load_dotenv()
 
 try:
     import modal
@@ -45,6 +49,8 @@ class EphemeralSandbox:
     def _run_in_modal_cloud(self, refactored_files: Dict[str, str], test_path: str) -> Dict[str, Any]:
         """Runs the test suite inside a real ephemeral Modal Cloud Sandbox with mounted files."""
         try:
+            start_time = time.perf_counter()
+            print("   ☁️ [Modal Cloud Sandbox] Provisioning ephemeral Linux container (App: aegis-sre)...")
             app = modal.App.lookup("aegis-sre", create_if_missing=True)
             image = modal.Image.debian_slim().pip_install("pytest", "pydantic")
 
@@ -79,22 +85,26 @@ class EphemeralSandbox:
                 app=app,
                 timeout=60
             )
+            print(f"   ☁️ [Modal Cloud Sandbox] Container Active: {sb.object_id} (Running remote pytest...)")
             sb.wait()
+            elapsed_seconds = round(time.perf_counter() - start_time, 2)
             stdout = sb.stdout.read()
             stderr = sb.stderr.read()
+            print(f"   ☁️ [Modal Cloud Sandbox] Finished in {elapsed_seconds}s (Exit Code {sb.returncode})")
 
             return {
                 "runner_type": "MODAL_CLOUD_CONTAINER",
                 "sandbox_id": sb.object_id,
                 "passed": (sb.returncode == 0),
                 "exit_code": sb.returncode,
+                "duration_seconds": elapsed_seconds,
                 "stdout": stdout,
                 "stderr": stderr,
                 "test_target": test_path,
                 "applied_files": list(refactored_files.keys())
             }
         except Exception as e:
-            print(f"[Aegis Sandbox] Modal cloud run encountered {e}. Reverting to local isolated runner.")
+            print(f"   ⚠️ [Modal Cloud Sandbox] Modal cloud run encountered {e}. Reverting to local isolated runner.")
             return self._run_in_local_sandbox(refactored_files, test_path)
 
     def _run_in_local_sandbox(self, refactored_files: Dict[str, str], test_path: str) -> Dict[str, Any]:

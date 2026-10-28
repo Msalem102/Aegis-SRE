@@ -23,6 +23,7 @@ if sys.stdout.encoding != "utf-8":
     except Exception:
         pass
 
+from core.config.aegis_config import AegisConfigLoader
 from core.diff.openapi_differ import diff_specs_from_files
 from core.analysis.dependency_mapper import DependencyMapper
 from core.llm.muse_client import MuseSparkClient
@@ -32,15 +33,26 @@ from core.delivery.github_delivery import GitHubDeliveryEngine
 
 
 def run_vector_b_remediation(
-    v1_spec_path: str = "scenarios/vector_b_contract/upstream/openapi_v1.json",
-    v2_spec_path: str = "scenarios/vector_b_contract/upstream/openapi_v2_breaking.json",
-    client_repo_path: str = "scenarios/vector_b_contract/client_repo",
-    test_target: str = "tests",
-    max_retries: int = 3
+    v1_spec_path: Optional[str] = None,
+    v2_spec_path: Optional[str] = None,
+    client_repo_path: Optional[str] = None,
+    test_target: Optional[str] = None,
+    max_retries: Optional[int] = None,
+    config_path: str = "aegis.yaml"
 ) -> Dict[str, Any]:
     print("=" * 78)
     print("🚨 AEGIS SRE: Autonomous API Contract Drift Remediation (Vector B)")
     print("=" * 78)
+
+    manifest = AegisConfigLoader.load_or_default(config_path)
+    api_cfg = manifest.upstream_apis[0] if manifest.upstream_apis else None
+    v1_spec_path = v1_spec_path or (api_cfg.baseline_spec if api_cfg else "scenarios/vector_b_contract/upstream/openapi_v1.json")
+    v2_spec_path = v2_spec_path or (api_cfg.target_spec if api_cfg else "scenarios/vector_b_contract/upstream/openapi_v2_breaking.json")
+    client_repo_path = client_repo_path or (api_cfg.client_repo_root if api_cfg else "scenarios/vector_b_contract/client_repo")
+    test_target = test_target or (api_cfg.test_target if api_cfg else "tests")
+    max_retries = max_retries or (api_cfg.max_healing_retries if api_cfg else 3)
+
+    print(f"[Contract Manifest] Loaded '{config_path}' for service '{manifest.project.service_name}'")
 
     interpreter_path = sys.executable
     sandbox = EphemeralSandbox(client_repo_path, python_interpreter=interpreter_path)
@@ -150,14 +162,28 @@ def run_vector_b_remediation(
         f.write(artifacts["post_mortem_markdown"])
     print(f" -> Saved Incident Post-Mortem Report: {post_mortem_file}")
 
-    pr = delivery.create_pull_request(
-        repo=f"meta-sre/{incident_error_log['service']}",
-        branch_name=f"aegis/remediate-{incident_id.lower()}",
+    target_repo = os.getenv("GITHUB_REPOSITORY") or manifest.project.repository
+    base_branch = manifest.project.default_branch
+
+    pr = delivery.deliver_remediation_pr(
+        repo=target_repo,
+        incident_id=incident_id,
         pr_title=artifacts["pr_title"],
-        pr_body=artifacts["post_mortem_markdown"]
+        pr_body=artifacts["post_mortem_markdown"],
+        files_to_commit=verified_synthesis["refactored_files"],
+        base_branch=base_branch
     )
-    print(f" -> Opened Ready-to-Merge GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
-    print(f"    PR URL: {pr['html_url']}")
+
+    if pr.get("status") == "LIVE_GITHUB_PR":
+        print(f" -> 🚀 Opened Live GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
+        print(f"    Target Repository: {pr['target_repo']}")
+        print(f"    Remote Branch:     {pr['branch']}")
+        print(f"    PR URL:            {pr['html_url']}")
+    else:
+        print(f" -> Opened Ready-to-Merge Pull Request #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
+        print(f"    Delivery Mode:     {pr['status']}")
+        print(f"    Target Repository: {pr['target_repo']}")
+        print(f"    PR URL:            {pr['html_url']}")
 
     if "--apply" in sys.argv:
         apply_verified_patch_to_repo(client_repo_path, verified_synthesis["refactored_files"])

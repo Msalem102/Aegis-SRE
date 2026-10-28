@@ -281,8 +281,15 @@ class GeneralizedOpenAPIDiffer:
 
 def diff_specs_from_files(v1_path: str, v2_path: str) -> Dict[str, Any]:
     with open(v1_path, "r", encoding="utf-8") as f1, open(v2_path, "r", encoding="utf-8") as f2:
-        v1 = json.load(f1)
-        v2 = json.load(f2)
+        try:
+            import jsonref
+            v1 = jsonref.load(f1, proxies=False)
+            v2 = jsonref.load(f2, proxies=False)
+        except Exception:
+            f1.seek(0)
+            f2.seek(0)
+            v1 = json.load(f1)
+            v2 = json.load(f2)
 
     differ = GeneralizedOpenAPIDiffer(v1, v2)
     changes = differ.compute_breaking_changes()

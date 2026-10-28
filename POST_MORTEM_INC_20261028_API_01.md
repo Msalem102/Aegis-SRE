@@ -1,80 +1,116 @@
 # Post-Mortem: INC-20261028-API-01 — Upstream Gateway v2 Contract Violation (422)
 
 **Incident ID:** INC-20261028-API-01  
-**Vector:** VECTOR_B_API_CONTRACT  
+**Vector Type:** VECTOR_B_API_CONTRACT  
 **Service:** `client_repo`  
 **Endpoint:** `POST /api/v2/payments/charge`  
-**Severity:** P1 — All charges blocked (422)  
-**Status:** Resolved — Verified Fix Merged  
-**Sandbox:** `aegis_ephemeral_yki2vfou` (LOCAL_EPHEMERAL_CONTAINER) — PASSED
+**Severity:** P1 — All charge requests failing  
+**Status:** Resolved — Verified Fix  
+**Date:** 2026-10-28  
+**Sandbox:** `sb-01M61FW9YB73R0FXBRS09X8HE6` (MODAL_CLOUD_CONTAINER)
 
-## Executive Summary
-On 2026-10-28, `client_repo` began returning `HTTP 422 Unprocessable Entity` against Upstream Gateway v2. Upstream introduced breaking changes: `amount` (float) → `amount_cents` (integer cents) and `customer_address` (string) → `billing.address.line1` (nested object). Downstream `PaymentClient` continued emitting legacy fields, triggering 4 contract violations. Aegis SRE autonomously diagnosed the OpenAPI diff, authored a backward-compatible patch, and verified it in an ephemeral sandbox where `test_client_payload_against_upstream_v2_gateway` now passes.
+---
 
-## Incident Trigger
-```
-tests/test_payment_client.py::test_client_payload_against_upstream_v2_gateway FAILED [100%]
-src/payment_client.py:27: in charge_customer
-    return self.transport.send_charge(payload)
-tests/test_payment_client.py:41: in send_charge
-    raise ValueError(f"Upstream Gateway 422 Unprocessable Entity - Contract Violations: {errors}")
-E   ValueError: Upstream Gateway 422 Unprocessable Entity - Contract Violations: ['Missing required field: amount_cents (integer)', 'Missing required field: billing (object)', 'Deprecated/Removed field present: customer_address', 'Deprecated/Removed field present: amount (float)']
-```
+## 1. Executive Summary
 
-## Root Cause Analysis
-Upstream v2 BREAKING changes not reflected downstream:
+On 2026-10-28, `client_repo`'s payment integration began returning HTTP 422 Unprocessable Entity against the Upstream Gateway v2. The upstream OpenAPI spec introduced breaking changes requiring `amount_cents` (integer) and `billing.address.line1` (object) while removing `amount` (float) and `customer_address` (string). The downstream `PaymentClient` was not migrated and continued sending the legacy payload, causing 100% failure of `test_client_payload_against_upstream_v2_gateway`. An autonomous remediation updated the data model and payload builder to be v2-compliant while preserving backward compatibility for legacy callers. Sandbox verification confirms 1/1 tests passing.
+
+## 2. Impact
+
+- **Affected Service:** `client_repo` → `PaymentClient.charge_customer()` → `Upstream Gateway V2`
+- **Failure Rate:** 100% of charge requests via `PaymentClient`
+- **Error:** `ValueError: Upstream Gateway 422 Unprocessable Entity - Contract Violations: ['Missing required field: amount_cents (integer)', 'Missing required field: billing (object)', 'Deprecated/Removed field present: customer_address', 'Deprecated/Removed field present: amount (float)']`
+- **User Impact:** No charges could be processed; downstream checkout blocked.
+- **Detection:** `tests/test_payment_client.py::test_client_payload_against_upstream_v2_gateway FAILED [100%]` at `src/payment_client.py:27` → `tests/test_payment_client.py:41` in `send_charge` mock.
+
+## 3. Timeline (UTC)
+
+| Time | Event |
+|------|-------|
+| 2026-10-28 T00:00 | Upstream Gateway v2 contract deployed (breaking OpenAPI changes) |
+| 2026-10-28 | Incident triggered: `client_repo` test suite fails with 422 |
+| 2026-10-28 | Aegis SRE Incident Delivery Core ingests trigger log, traceback, and OpenAPI diff |
+| 2026-10-28 | Diagnosis: 4 BREAKING changes identified (see §4) |
+| 2026-10-28 | Verified patch generated for `src/models.py` and `src/payment_client.py` |
+| 2026-10-28 | Sandbox verification `sb-01M61FW9YB73R0FXBRS09X8HE6` — `pytest tests` — **PASSED** (1.98s, exit 0) |
+| 2026-10-28 | PR ready-to-merge authored |
+
+## 4. Root Cause Analysis
+
+### 4.1 Contract Diff (Technical Findings)
 
 | Change Class | Type | Field | Details |
-|---|---|---|---|
-| BREAKING | FIELD_NEWLY_REQUIRED | `billing` (object) | Now required; leaf `billing.address.line1` mandatory |
-| BREAKING | FIELD_NEWLY_REQUIRED | `amount_cents` (integer) | Now required; cents conversion `int(round(amount*100))` |
-| BREAKING | FIELD_REMOVED | `amount` (number) | Removed; presence = violation |
+|--------------|------|-------|---------|
+| BREAKING | FIELD_NEWLY_REQUIRED | `amount_cents` | `integer`, leaf `amount_cents` now strictly required |
+| BREAKING | FIELD_NEWLY_REQUIRED | `billing` | `object`, leaf `billing.address.line1` now strictly required |
+| BREAKING | FIELD_REMOVED | `amount` | `number` (float dollars) removed from spec |
 | BREAKING | FIELD_STRUCTURALLY_NESTED | `customer_address` → `billing.address.line1` | Relocated to nested hierarchy |
-| WARNING | RESPONSE_STATUS_REMOVED | `400` | No longer documented |
+| WARNING | RESPONSE_STATUS_REMOVED | `400` | No longer documented (non-blocking) |
 
-`PaymentClient.build_charge_payload` emitted `{customer_id, amount, customer_address, currency}` and omitted `{amount_cents, billing}`. Strict upstream validation rejected payload with 4 violations. No coercion layer existed.
+### 4.2 Downstream Code Path
 
-## Impact
-- **100% of `charge_customer` calls** via `PaymentClient` failed with 422.
-- No charges could be processed against v2 gateway.
-- Test suite: `test_client_payload_against_upstream_v2_gateway` failed (1 failed in 0.44s).
+- `src/models.py` `ChargeRequest` only exposed legacy fields `amount: float` and `customer_address: str`.
+- `src/payment_client.py:build_charge_payload()` constructed:
+  ```json
+  {
+    "customer_id": "...",
+    "amount": 49.99,
+    "customer_address": "123 Main St",
+    "currency": "USD"
+  }
+  ```
+- `UpstreamGatewayV2MockTransport.send_charge()` validates strictly against v2 spec and rejects any payload missing `amount_cents`/`billing` or containing deprecated fields.
+- No conversion logic (`amount * 100` → `amount_cents`) or nesting logic (`customer_address` → `billing.address.line1`) existed.
 
-## Resolution
-Autonomous patch applied to 2 files to implement v2 contract while preserving backward compatibility for legacy callers:
+### 4.3 Why 422
 
-### 1. `src/models.py` (NEW — 105 lines)
-Introduced Pydantic models `Address`, `Billing`, `ChargeRequest`, `ChargeResponse` with bidirectional sync:
-- Legacy → v2: `amount` → `amount_cents` via `int(round(amount*100))`; `customer_address` → `Billing(address=Address(line1=...))`
-- v2 → Legacy: `amount_cents` → `amount` via `/100.0`; `billing.address.line1` → `customer_address`
-- Strict validation: raises `ValueError` if `amount_cents` or `billing.address.line1` still missing after sync.
-- Supports both Pydantic v2 (`model_validator`) and v1 (`root_validator`) with `populate_by_name`/`allow_population_by_field_name`.
+The gateway correctly enforced the new contract. The downstream client violated all four breaking rules simultaneously, hence 4 contract violations in one response.
 
-### 2. `src/payment_client.py` (NEW — 53 lines)
-Rewrote `PaymentClient.build_charge_payload(request: ChargeRequest) -> Dict[str, Any]`:
-- Resolves `amount_cents` with fallback to legacy `amount` conversion.
-- Resolves `billing` via `model_dump()`/`dict()` normalization or legacy `customer_address` fallback to `{"address": {"line1": ...}}`.
-- Returns **only** v2-compliant payload: `{"customer_id", "amount_cents", "currency", "billing"}` — no deprecated fields.
-- `charge_customer` now delegates to `build_charge_payload` then `transport.send_charge`.
+## 5. Resolution
 
-## Verified Diff (Sandbox-Applied)
+### 5.1 Strategy
+Model reconciliation + payload filtering with full backward compatibility. Legacy callers passing `amount`/`customer_address` continue to work; v2 callers passing `amount_cents`/`billing` work natively; mixed callers are synchronized with v2 taking precedence.
+
+### 5.2 Changes
+
+**`src/models.py` — New reconciled models:**
+- Added `Address(line1: str)` and `Billing(address: Address)`
+- `ChargeRequest` now exposes both v2 (`amount_cents: Optional[int]`, `billing: Optional[Billing]`) and legacy (`amount: Optional[float]`, `customer_address: Optional[str]`) fields
+- `@model_validator(mode='after') reconcile_legacy_and_v2()`:
+  - `amount` → `amount_cents` via `int(round(amount * 100))`
+  - `amount_cents` → `amount` via `amount_cents / 100.0` with int coercion
+  - `customer_address` → `billing` via `Billing(address=Address(line1=customer_address))`
+  - `billing` → `customer_address` via `billing.address.line1`
+  - Validates at least one amount and one address source is provided; syncs legacy to v2 when both present
+
+**`src/payment_client.py` — v2-only payload builder:**
+- `build_charge_payload()` now resolves `amount_cents` defensively (prefers `amount_cents`, falls back to `amount*100`, coerces to int)
+- Resolves `billing` defensively (handles both `Billing` object and `dict` form, falls back to `customer_address`)
+- Validates `billing.address.line1` presence, raises `ValueError` if missing
+- Returns **only** v2 fields:
+  ```json
+  {
+    "customer_id": "...",
+    "amount_cents": 4999,
+    "currency": "USD",
+    "billing": {"address": {"line1": "123 Main St"}}
+  }
+  ```
+- Drops deprecated `amount` and `customer_address` entirely
+
+### 5.3 Verified Diff
+
 ```diff
 --- a/src/models.py
 +++ b/src/models.py
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,69 @@
 +"""
 +Downstream Client Data Models for Payment Gateway Service.
-+Supports Upstream OpenAPI v2 while preserving backward compatibility for legacy callers.
++Updated to support OpenAPI v2 while preserving backward compatibility with v1 callers.
 +"""
 +
 +from typing import Optional
-+from pydantic import BaseModel, Field
-+
-+try:
-+    from pydantic import model_validator
-+    _HAS_MODEL_VALIDATOR = True
-+except ImportError:
-+    _HAS_MODEL_VALIDATOR = False
-+    from pydantic import root_validator
++from pydantic import BaseModel, Field, model_validator
 +
 +
 +class Address(BaseModel):
@@ -88,79 +124,45 @@ Rewrote `PaymentClient.build_charge_payload(request: ChargeRequest) -> Dict[str,
 +class ChargeRequest(BaseModel):
 +    customer_id: str
 +    currency: str = "USD"
-+    # v2 contract fields
-+    amount_cents: Optional[int] = Field(default=None, description="Charge amount in cents (e.g. 4999 for $49.99)")
-+    billing: Optional[Billing] = Field(default=None, description="Billing information")
-+    # legacy fields for backward compatibility
-+    amount: Optional[float] = Field(default=None, description="Legacy: Charge amount in dollars (e.g. 49.99)")
-+    customer_address: Optional[str] = Field(default=None, description="Legacy: Primary customer address")
++    # v2 contract fields (required upstream)
++    amount_cents: Optional[int] = Field(default=None, description="Charge amount in cents (e.g. 4999)")
++    billing: Optional[Billing] = Field(default=None, description="Billing object containing address")
++    # Legacy v1 fields - retained for backward compatibility
++    amount: Optional[float] = Field(default=None, description="Charge amount in dollars (e.g. 49.99) - legacy, use amount_cents")
++    customer_address: Optional[str] = Field(default=None, description="Primary customer address - legacy, use billing.address.line1")
 +
-+    if _HAS_MODEL_VALIDATOR:
-+        @model_validator(mode='after')
-+        def _sync_fields(self):
-+            # legacy -> v2
-+            if self.amount_cents is None and self.amount is not None:
-+                self.amount_cents = int(round(self.amount * 100))
-+            if self.billing is None and self.customer_address is not None:
-+                self.billing = Billing(address=Address(line1=self.customer_address))
-+            # v2 -> legacy (preserve backward compat for readers)
-+            if self.amount is None and self.amount_cents is not None:
-+                self.amount = self.amount_cents / 100.0
-+            if self.customer_address is None and self.billing is not None:
-+                try:
-+                    line1 = self.billing.address.line1
-+                    if line1:
-+                        self.customer_address = line1
-+                except Exception:
-+                    pass
-+            if self.amount_cents is None:
-+                raise ValueError("amount_cents is required (or legacy amount must be provided)")
-+            if self.billing is None or self.billing.address is None or not self.billing.address.line1:
-+                raise ValueError("billing.address.line1 is required (or legacy customer_address must be provided)")
-+            return self
-+    else:
-+        @root_validator
-+        def _sync_fields(cls, values):
-+            amount = values.get('amount')
-+            amount_cents = values.get('amount_cents')
-+            customer_address = values.get('customer_address')
-+            billing = values.get('billing')
-+            if amount_cents is None and amount is not None:
-+                values['amount_cents'] = int(round(amount * 100))
-+            if billing is None and customer_address is not None:
-+                values['billing'] = Billing(address=Address(line1=customer_address))
-+            if values.get('amount') is None and values.get('amount_cents') is not None:
-+                values['amount'] = values['amount_cents'] / 100.0
-+            if values.get('customer_address') is None and values.get('billing') is not None:
-+                b = values['billing']
-+                line1 = None
-+                if isinstance(b, dict):
-+                    line1 = b.get('address', {}).get('line1')
-+                elif hasattr(b, 'address'):
-+                    try:
-+                        addr = b.address
-+                        if isinstance(addr, dict):
-+                            line1 = addr.get('line1')
-+                        else:
-+                            line1 = getattr(addr, 'line1', None)
-+                    except Exception:
-+                        pass
-+                if line1:
-+                    values['customer_address'] = line1
-+            if values.get('amount_cents') is None:
-+                raise ValueError("amount_cents is required (or legacy amount must be provided)")
-+            if values.get('billing') is None:
-+                raise ValueError("billing.address.line1 is required (or legacy customer_address must be provided)")
-+            if isinstance(values.get('billing'), dict):
-+                try:
-+                    values['billing'] = Billing(**values['billing'])
-+                except Exception:
-+                    pass
-+            return values
-+
-+    class Config:
-+        populate_by_name = True
-+        allow_population_by_field_name = True
++    @model_validator(mode='after')
++    def reconcile_legacy_and_v2(self):
++        # Reconcile amount <-> amount_cents
++        if self.amount_cents is None and self.amount is not None:
++            self.amount_cents = int(round(self.amount * 100))
++        elif self.amount is None and self.amount_cents is not None:
++            if not isinstance(self.amount_cents, int):
++                self.amount_cents = int(round(float(self.amount_cents)))
++            self.amount = self.amount_cents / 100.0
++        elif self.amount_cents is None and self.amount is None:
++            raise ValueError("Either 'amount' (legacy) or 'amount_cents' (v2) must be provided")
++        else:
++            if not isinstance(self.amount_cents, int):
++                self.amount_cents = int(round(float(self.amount_cents)))
++        # Reconcile customer_address <-> billing.address.line1
++        if self.billing is None and self.customer_address is not None:
++            self.billing = Billing(address=Address(line1=self.customer_address))
++        elif self.billing is not None and self.customer_address is None:
++            try:
++                self.customer_address = self.billing.address.line1
++            except Exception:
++                pass
++        elif self.billing is None and self.customer_address is None:
++            raise ValueError("Either 'customer_address' (legacy) or 'billing.address.line1' (v2) must be provided")
++        if self.billing is not None and self.customer_address is not None:
++            try:
++                v2_line1 = self.billing.address.line1
++                if v2_line1 != self.customer_address:
++                    self.customer_address = v2_line1
++            except Exception:
++                pass
++        return self
 +
 +
 +class ChargeResponse(BaseModel):
@@ -169,11 +171,11 @@ Rewrote `PaymentClient.build_charge_payload(request: ChargeRequest) -> Dict[str,
 
 --- a/src/payment_client.py
 +++ b/src/payment_client.py
-@@ -0,0 +1,53 @@
+@@ -0,0 +1,61 @@
 +"""
 +Downstream Payment Client executing HTTP charges.
-+Constructs payloads adhering to Upstream OpenAPI v2 Specification
-+while preserving backward compatibility for legacy ChargeRequest callers.
++Updated to construct payloads adhering to OpenAPI v2 Specification
++while preserving backward compatibility for legacy callers.
 +"""
 +
 +from typing import Dict, Any
@@ -187,35 +189,35 @@ Rewrote `PaymentClient.build_charge_payload(request: ChargeRequest) -> Dict[str,
 +
 +    def build_charge_payload(self, request: ChargeRequest) -> Dict[str, Any]:
 +        """Constructs the outbound JSON payload for POST /api/v2/payments/charge."""
-+        # Resolve amount_cents with backward compatibility (float dollars -> int cents)
-+        amount_cents = request.amount_cents
-+        if amount_cents is None and getattr(request, 'amount', None) is not None:
++        if request.amount_cents is not None:
++            amount_cents = request.amount_cents
++        elif request.amount is not None:
 +            amount_cents = int(round(request.amount * 100))
-+        if amount_cents is None:
-+            raise ValueError("amount_cents is required")
-+        # Resolve billing with backward compatibility (customer_address -> billing.address.line1)
-+        billing = request.billing
-+        billing_dict = None
-+        if billing is not None:
-+            if isinstance(billing, dict):
-+                billing_dict = billing
-+            elif hasattr(billing, 'model_dump'):
-+                billing_dict = billing.model_dump()
-+            elif hasattr(billing, 'dict'):
-+                billing_dict = billing.dict()
++        else:
++            raise ValueError("Missing required field: amount_cents")
++        if not isinstance(amount_cents, int):
++            amount_cents = int(round(float(amount_cents)))
++        billing = None
++        line1 = None
++        if request.billing is not None:
++            if isinstance(request.billing, dict):
++                addr = request.billing.get("address", {})
++                line1 = addr.get("line1")
++                if line1:
++                    billing = {"address": {"line1": line1}}
 +            else:
-+                billing_dict = billing
-+        elif getattr(request, 'customer_address', None):
-+            billing_dict = {"address": {"line1": request.customer_address}}
-+        if billing_dict is None:
-+            raise ValueError("billing.address.line1 is required")
-+        # Ensure billing_dict is normalized to {"address": {"line1": ...}}
-+        # Already handled via model conversion; just ensure correct shape
++                line1 = request.billing.address.line1
++                billing = {"address": {"line1": line1}}
++        elif request.customer_address is not None:
++            line1 = request.customer_address
++            billing = {"address": {"line1": line1}}
++        if not line1 or billing is None:
++            raise ValueError("Missing required field: billing.address.line1")
 +        return {
 +            "customer_id": request.customer_id,
 +            "amount_cents": amount_cents,
 +            "currency": request.currency,
-+            "billing": billing_dict
++            "billing": billing
 +        }
 +
 +    def charge_customer(self, request: ChargeRequest) -> ChargeResponse:
@@ -225,44 +227,48 @@ Rewrote `PaymentClient.build_charge_payload(request: ChargeRequest) -> Dict[str,
 +        return ChargeResponse(charge_id="ch_mock_123", status="succeeded")
 ```
 
-## Sandbox Verification Proof
-**Runner:** `LOCAL_EPHEMERAL_CONTAINER`  
-**Sandbox ID:** `aegis_ephemeral_yki2vfou`  
-**Applied Files:** `src/models.py`, `src/payment_client.py`  
-**Exit Code:** `0` — **PASSED**
+## 6. Verification
 
+**Sandbox:** MODAL_CLOUD_CONTAINER `sb-01M61FW9YB73R0FXBRS09X8HE6`  
+**Applied Files:** `src/models.py`, `src/payment_client.py`  
+**Test Target:** `tests`  
+**Result:** PASSED — Exit Code 0 — Duration 1.98s
+
+**Stdout:**
 ```
-============================= test session starts =============================
-platform win32 -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0 -- C:\Users\ahmed\Desktop\meta-global-hack\.venv\Scripts\python.exe
+============================= test session starts ==============================
+platform linux -- Python 3.12.10, pytest-9.2.0, pluggy-1.7.0 -- /usr/local/bin/python
 cachedir: .pytest_cache
-rootdir: C:\Users\ahmed\AppData\Local\Temp\aegis_ephemeral_yki2vfou\repo
-plugins: anyio-4.15.1
+rootdir: /tmp/repo
 collecting ... collected 1 item
 
 tests/test_payment_client.py::test_client_payload_against_upstream_v2_gateway PASSED [100%]
 
-============================== warnings summary ===============================
-src\models.py:25
-  C:\Users\ahmed\AppData\Local\Temp\aegis_ephemeral_yki2vfou\repo\src\models.py:25: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.14/migration/
-    class ChargeRequest(BaseModel):
-
-..\..\..\..\..\Desktop\meta-global-hack\.venv\Lib\site-packages\pydantic\_internal\_config.py:408
-  C:\Users\ahmed\Desktop\meta-global-hack\.venv\Lib\site-packages\pydantic\_internal\_config.py:408: UserWarning: Valid config keys have changed in V2:
-  * 'allow_population_by_field_name' has been renamed to 'validate_by_name'
-    warnings.warn(message, UserWarning)
-
--- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================== 1 passed, 2 warnings in 0.21s ========================
+============================== 1 passed in 0.07s ===============================
 ```
+**Stderr:** (empty)
 
-**Result:** Previously failing contract test now passes. No regressions. Warnings are non-blocking Pydantic v2 deprecation notices.
+The previously failing `test_client_payload_against_upstream_v2_gateway` now passes, confirming the payload no longer contains deprecated fields and satisfies all required v2 fields with correct types.
 
-## Lessons Learned & Action Items
-- [x] Add contract-test in CI against upstream OpenAPI v2 spec to catch breaking changes pre-deploy
-- [ ] Migrate all legacy callers from `amount`/`customer_address` to `amount_cents`/`billing` and deprecate legacy fields after grace period
-- [ ] Update `Config` to `ConfigDict` to silence Pydantic v2 warnings
-- [ ] Monitor upstream changelog for `RESPONSE_STATUS_REMOVED: 400` — ensure error handling covers new status mapping
-- [ ] Add unit tests for edge cases: rounding (`49.995` → `5000`), zero/negative amounts, empty `line1`
+## 7. Lessons Learned
 
----
-*Generated by Aegis SRE Incident Delivery Core (Meta Muse Spark) — Autonomous remediation verified in sandbox `aegis_ephemeral_yki2vfou`.*
+- Breaking OpenAPI changes (type change `float`→`int`, structural nesting) must be treated as major version bumps with downstream codemods.
+- Strict mock transports that validate `required` + `deprecated` fields are effective at catching contract drift early in CI.
+- Backward compatibility via model validators reduces migration risk for internal callers still using legacy fields.
+- Amount handling requires explicit rounding (`round(amount*100)`) to avoid floating-point truncation errors.
+
+## 8. Action Items
+
+| Action | Owner | Priority |
+|--------|-------|----------|
+| Add contract-testing CI job that diffs OpenAPI spec on every upstream release | Platform | High |
+| Deprecate `amount`/`customer_address` with warnings and schedule removal in next major | Payments Team | Medium |
+| Add unit tests for edge cases: `amount=0.01`, `amount_cents` as float string, `billing` as dict | Payments Team | Medium |
+| Monitor gateway 422 rate post-deploy | SRE | High |
+| Update API documentation and client SDK changelog for v2 migration | Docs | Low |
+
+## 9. Appendix
+
+- **Incident Trigger:** `ValueError: Upstream Gateway 422 Unprocessable Entity - Contract Violations: ['Missing required field: amount_cents (integer)', 'Missing required field: billing (object)', 'Deprecated/Removed field present: customer_address', 'Deprecated/Removed field present: amount (float)']` at `src/payment_client.py:27` / `tests/test_payment_client.py:41`
+- **Diagnosis Source:** OpenAPI diff analysis (4 BREAKING, 1 WARNING)
+- **Rollback Plan:** Revert to legacy gateway v1 if v2 verification fails (not needed — verification passed)

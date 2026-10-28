@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional
 import os
 import re
 import json
+import time
 import httpx
 from dotenv import load_dotenv
 from core.db.safety_guard import DDLSafetyGuard
@@ -114,15 +115,19 @@ class MuseDBClient:
             "response_format": {"type": "json_object"}
         }
 
+        print(f"   🧠 [Meta Model API] Dispatching live prompt to '{self.model_name}' at {self.base_url}...")
+        start_t = time.perf_counter()
         with httpx.Client(timeout=60.0) as client:
             resp = client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
+            elapsed = round(time.perf_counter() - start_t, 2)
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
             usage = data.get("usage", {})
             p_tokens = usage.get("prompt_tokens", self.cost_tracker.estimate_tokens_from_text(system_prompt + user_prompt))
             c_tokens = usage.get("completion_tokens", self.cost_tracker.estimate_tokens_from_text(content))
             self.cost_tracker.record_usage(p_tokens, c_tokens, task_name=task_name)
+            print(f"   🧠 [Meta Model API] Response received in {elapsed}s | Tokens: {p_tokens} prompt + {c_tokens} completion")
 
             if content.startswith("```"):
                 lines = content.strip().split("\n")
@@ -156,52 +161,103 @@ class MuseDBClient:
             c["column_name"].lower() for c in table_catalog.get("columns", []) if c.get("is_primary_key")
         }
 
-        # 2. Extract WHERE predicate columns dynamically
         where_cols: List[str] = []
-        where_match = re.search(r"\bWHERE\b(.*?)(?:\bORDER\s+BY\b|\bGROUP\s+BY\b|\bLIMIT\b|;|$)", query, re.I | re.S)
-        if where_match:
-            where_clause = where_match.group(1)
-            candidates = re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<=|>=|<|>|\bIN\b|\bLIKE\b)", where_clause, re.I)
-            for cand in candidates:
-                clower = cand.lower()
-                if clower not in {"and", "or", "not", "null", "true", "false"}:
-                    actual_col = valid_columns.get(clower, cand)
-                    if actual_col not in where_cols:
-                        where_cols.append(actual_col)
-
-        # 3. Extract ORDER BY columns and sort direction dynamically
         order_specs: List[str] = []
         order_base_cols: List[str] = []
-        order_match = re.search(r"\bORDER\s+BY\b(.*?)(?:\bLIMIT\b|;|$)", query, re.I | re.S)
-        if order_match:
-            order_clause = order_match.group(1).strip()
-            for part in order_clause.split(","):
-                tokens = part.strip().split()
-                if tokens:
-                    raw_col = tokens[0].split(".")[-1]
-                    actual_col = valid_columns.get(raw_col.lower(), raw_col)
-                    direction = "DESC" if len(tokens) > 1 and tokens[1].upper() == "DESC" else ""
-                    if actual_col not in where_cols and actual_col not in order_base_cols:
-                        order_base_cols.append(actual_col)
-                        order_specs.append(f"{actual_col} {direction}".strip())
-
-        # 4. Extract SELECT projected columns to determine covering INCLUDE columns
         include_cols: List[str] = []
-        select_match = re.search(r"\bSELECT\b(.*?)\bFROM\b", query, re.I | re.S)
-        if select_match:
-            select_clause = select_match.group(1)
-            for part in select_clause.split(","):
-                col_token = part.strip().split()[-1].split(".")[-1]
-                clower = col_token.lower()
+
+        # Parse AST using sqlglot (with regex fallback)
+        parsed_via_ast = False
+        try:
+            import sqlglot
+            from sqlglot import exp
+            parsed = sqlglot.parse_one(query, read="postgres")
+
+            if not table_name:
+                tables = [t.name for t in parsed.find_all(exp.Table) if t.name]
+                table_name = tables[0] if tables else "target_table"
+
+            where_node = parsed.find(exp.Where)
+            if where_node:
+                for col in where_node.find_all(exp.Column):
+                    clower = col.name.lower()
+                    if clower not in {"and", "or", "not", "null", "true", "false"}:
+                        actual = valid_columns.get(clower, col.name)
+                        if actual not in where_cols:
+                            where_cols.append(actual)
+
+            order_node = parsed.find(exp.Order)
+            if order_node:
+                for ordered in order_node.expressions:
+                    col_node = ordered.this
+                    cname = col_node.name if isinstance(col_node, exp.Column) else str(col_node).split(".")[-1]
+                    actual = valid_columns.get(cname.lower(), cname)
+                    direction = "DESC" if ordered.args.get("desc") else ""
+                    if actual not in where_cols and actual not in order_base_cols:
+                        order_base_cols.append(actual)
+                        order_specs.append(f"{actual} {direction}".strip())
+
+            for select_exp in parsed.selects:
+                col_node = select_exp.this if hasattr(select_exp, "this") else select_exp
+                cname = col_node.name if isinstance(col_node, exp.Column) else str(col_node).split(".")[-1]
+                clower = cname.lower()
                 if clower in valid_columns:
-                    actual_col = valid_columns[clower]
+                    actual = valid_columns[clower]
                     if (
-                        actual_col not in where_cols
-                        and actual_col not in order_base_cols
+                        actual not in where_cols
+                        and actual not in order_base_cols
                         and clower not in pk_columns
-                        and actual_col not in include_cols
+                        and actual not in include_cols
                     ):
-                        include_cols.append(actual_col)
+                        include_cols.append(actual)
+
+            parsed_via_ast = True
+        except Exception:
+            parsed_via_ast = False
+
+        if not parsed_via_ast:
+            # 2. Extract WHERE predicate columns dynamically via regex fallback
+            where_match = re.search(r"\bWHERE\b(.*?)(?:\bORDER\s+BY\b|\bGROUP\s+BY\b|\bLIMIT\b|;|$)", query, re.I | re.S)
+            if where_match:
+                where_clause = where_match.group(1)
+                candidates = re.findall(r"\b([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|!=|<>|<=|>=|<|>|\bIN\b|\bLIKE\b)", where_clause, re.I)
+                for cand in candidates:
+                    clower = cand.lower()
+                    if clower not in {"and", "or", "not", "null", "true", "false"}:
+                        actual_col = valid_columns.get(clower, cand)
+                        if actual_col not in where_cols:
+                            where_cols.append(actual_col)
+
+            # 3. Extract ORDER BY columns and sort direction dynamically
+            order_match = re.search(r"\bORDER\s+BY\b(.*?)(?:\bLIMIT\b|;|$)", query, re.I | re.S)
+            if order_match:
+                order_clause = order_match.group(1).strip()
+                for part in order_clause.split(","):
+                    tokens = part.strip().split()
+                    if tokens:
+                        raw_col = tokens[0].split(".")[-1]
+                        actual_col = valid_columns.get(raw_col.lower(), raw_col)
+                        direction = "DESC" if len(tokens) > 1 and tokens[1].upper() == "DESC" else ""
+                        if actual_col not in where_cols and actual_col not in order_base_cols:
+                            order_base_cols.append(actual_col)
+                            order_specs.append(f"{actual_col} {direction}".strip())
+
+            # 4. Extract SELECT projected columns to determine covering INCLUDE columns
+            select_match = re.search(r"\bSELECT\b(.*?)\bFROM\b", query, re.I | re.S)
+            if select_match:
+                select_clause = select_match.group(1)
+                for part in select_clause.split(","):
+                    col_token = part.strip().split()[-1].split(".")[-1]
+                    clower = col_token.lower()
+                    if clower in valid_columns:
+                        actual_col = valid_columns[clower]
+                        if (
+                            actual_col not in where_cols
+                            and actual_col not in order_base_cols
+                            and clower not in pk_columns
+                            and actual_col not in include_cols
+                        ):
+                            include_cols.append(actual_col)
 
         indexed_columns = where_cols + order_specs
         if not indexed_columns and valid_columns:

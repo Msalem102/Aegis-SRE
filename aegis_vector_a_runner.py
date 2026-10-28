@@ -25,6 +25,7 @@ if sys.stdout.encoding != "utf-8":
     except Exception:
         pass
 
+from core.config.aegis_config import AegisConfigLoader
 from core.db.inspector import ReadOnlyDatabaseInspector
 from core.db.safety_guard import DDLSafetyGuard
 from core.llm.muse_db_client import MuseDBClient
@@ -34,14 +35,24 @@ from core.delivery.github_delivery import GitHubDeliveryEngine
 
 
 def run_vector_a_remediation(
-    telemetry_path: str = "scenarios/vector_a_db/incident_telemetry.json",
-    schema_sql_path: str = "scenarios/vector_a_db/schema.sql",
-    live_db_file: str = "scenarios/vector_a_db/live_production_sim.db",
-    max_retries: int = 3
+    telemetry_path: Optional[str] = None,
+    schema_sql_path: Optional[str] = None,
+    live_db_file: Optional[str] = None,
+    max_retries: Optional[int] = None,
+    config_path: str = "aegis.yaml"
 ) -> Dict[str, Any]:
     print("=" * 78)
     print("🚨 AEGIS SRE: Autonomous Database Performance Remediation (Vector A)")
     print("=" * 78)
+
+    manifest = AegisConfigLoader.load_or_default(config_path)
+    db_cfg = manifest.database
+    telemetry_path = telemetry_path or (db_cfg.telemetry_source if db_cfg else "scenarios/vector_a_db/incident_telemetry.json")
+    schema_sql_path = schema_sql_path or (db_cfg.schema_path if db_cfg else "scenarios/vector_a_db/schema.sql")
+    live_db_file = live_db_file or (db_cfg.live_db_path if db_cfg else "scenarios/vector_a_db/live_production_sim.db")
+    max_retries = max_retries or (db_cfg.max_healing_retries if db_cfg else 3)
+
+    print(f"[Contract Manifest] Loaded '{config_path}' for service '{manifest.project.service_name}'")
 
     with open(telemetry_path, "r", encoding="utf-8") as f:
         alert_payload = json.load(f)
@@ -177,14 +188,41 @@ def run_vector_a_remediation(
         f.write(artifacts["post_mortem_markdown"])
     print(f" -> Saved Incident Post-Mortem Report: {post_mortem_file}")
 
-    pr = delivery.create_pull_request(
-        repo=f"meta-sre/{service}",
-        branch_name=f"aegis/remediate-{incident_id.lower()}",
+    # Save SQL migration artifact to configured migration directory
+    migration_dir = db_cfg.migration_output_dir if db_cfg else "migrations"
+    os.makedirs(migration_dir, exist_ok=True)
+    clean_idx = verified_synthesis.get("index_name", "index").lower()
+    migration_file_path = f"{migration_dir}/20261028_add_{clean_idx}.sql"
+    with open(migration_file_path, "w", encoding="utf-8") as mf:
+        mf.write(verified_synthesis["ddl_script"])
+    print(f" -> Saved Production DDL Migration: {migration_file_path}")
+
+    files_to_commit = {
+        migration_file_path: verified_synthesis["ddl_script"]
+    }
+
+    target_repo = os.getenv("GITHUB_REPOSITORY") or manifest.project.repository
+    base_branch = manifest.project.default_branch
+
+    pr = delivery.deliver_remediation_pr(
+        repo=target_repo,
+        incident_id=incident_id,
         pr_title=artifacts["pr_title"],
-        pr_body=artifacts["post_mortem_markdown"]
+        pr_body=artifacts["post_mortem_markdown"],
+        files_to_commit=files_to_commit,
+        base_branch=base_branch
     )
-    print(f" -> Opened Ready-to-Merge GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
-    print(f"    PR URL: {pr['html_url']}")
+
+    if pr.get("status") == "LIVE_GITHUB_PR":
+        print(f" -> 🚀 Opened Live GitHub PR #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
+        print(f"    Target Repository: {pr['target_repo']}")
+        print(f"    Remote Branch:     {pr['branch']}")
+        print(f"    PR URL:            {pr['html_url']}")
+    else:
+        print(f" -> Opened Ready-to-Merge Pull Request #{pr['pr_number']}: \"{artifacts['pr_title']}\"")
+        print(f"    Delivery Mode:     {pr['status']}")
+        print(f"    Target Repository: {pr['target_repo']}")
+        print(f"    PR URL:            {pr['html_url']}")
 
     print("\n🎉 Vector A Autonomous Remediation Complete!")
     print("=" * 78)
