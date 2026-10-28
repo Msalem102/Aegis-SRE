@@ -10,6 +10,9 @@ import os
 import json
 import re
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class MuseSparkClient:
@@ -17,11 +20,11 @@ class MuseSparkClient:
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        model_name: str = "muse-spark"
+        model_name: Optional[str] = None
     ):
         self.api_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY")
         self.base_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
-        self.model_name = model_name
+        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark"
 
     def synthesize_contract_refactor(
         self,
