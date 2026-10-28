@@ -15,6 +15,7 @@ import json
 import httpx
 from dotenv import load_dotenv
 from core.db.safety_guard import DDLSafetyGuard
+from core.telemetry.cost_tracker import CostTracker
 
 load_dotenv()
 
@@ -28,7 +29,8 @@ class MuseDBClient:
     ):
         self.api_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY")
         self.base_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
-        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark"
+        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark-1.2"
+        self.cost_tracker = CostTracker(model_name=self.model_name)
 
     def synthesize_database_remediation(
         self,
@@ -81,17 +83,23 @@ class MuseDBClient:
 
         if self.api_key and self.api_key != "MOCK":
             try:
-                response = self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2))
+                response = self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2), task_name="synthesize_database_remediation")
                 is_safe, violations = DDLSafetyGuard.validate_ddl(response.get("ddl_script", ""))
                 if not is_safe:
                     response["ddl_script"] = DDLSafetyGuard.enforce_safety_envelope(response.get("ddl_script", ""))
+                response["cost_metrics"] = self.cost_tracker.get_task_summary()
                 return response
             except Exception as e:
                 print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local SQL AST analyzer.")
 
-        return self._generic_sql_ast_reasoner(outage_alert, query, table_catalog, raw_explain_plan)
+        response = self._generic_sql_ast_reasoner(outage_alert, query, table_catalog, raw_explain_plan)
+        p_tokens = self.cost_tracker.estimate_tokens_from_text(system_prompt + json.dumps(user_prompt))
+        c_tokens = self.cost_tracker.estimate_tokens_from_text(json.dumps(response))
+        self.cost_tracker.record_usage(p_tokens, c_tokens, task_name="synthesize_database_remediation")
+        response["cost_metrics"] = self.cost_tracker.get_task_summary()
+        return response
 
-    def _call_live_api(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
+    def _call_live_api(self, system_prompt: str, user_prompt: str, task_name: str = "llm_call") -> Dict[str, Any]:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -111,6 +119,10 @@ class MuseDBClient:
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
+            usage = data.get("usage", {})
+            p_tokens = usage.get("prompt_tokens", self.cost_tracker.estimate_tokens_from_text(system_prompt + user_prompt))
+            c_tokens = usage.get("completion_tokens", self.cost_tracker.estimate_tokens_from_text(content))
+            self.cost_tracker.record_usage(p_tokens, c_tokens, task_name=task_name)
 
             if content.startswith("```"):
                 lines = content.strip().split("\n")

@@ -106,8 +106,11 @@ def run_vector_b_remediation(
             previous_errors=last_sandbox_error
         )
         refactored_files = synthesis.get("refactored_files", {})
+        cost_info = synthesis.get("cost_metrics", {})
         print(f" -> Diagnosis: \"{synthesis.get('diagnosis', '')}\"")
         print(f" -> Synthesized candidate patch across {len(refactored_files)} file(s): {list(refactored_files.keys())}")
+        if cost_info:
+            print(f" -> Task Accounting ({cost_info['model']}): {cost_info['total_tokens']} tokens | Remediation Cost: {cost_info['total_cost_formatted']} (Human SRE Baseline: ${cost_info['roi_comparison']['manual_sre_triage_cost_usd']:.2f})")
 
         sandbox_result = sandbox.execute_test_suite(refactored_files, test_path=test_target)
         if sandbox_result["passed"]:

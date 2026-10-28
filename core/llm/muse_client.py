@@ -11,6 +11,7 @@ import json
 import re
 import httpx
 from dotenv import load_dotenv
+from core.telemetry.cost_tracker import CostTracker
 
 load_dotenv()
 
@@ -24,7 +25,8 @@ class MuseSparkClient:
     ):
         self.api_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY")
         self.base_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
-        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark"
+        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark-1.2"
+        self.cost_tracker = CostTracker(model_name=self.model_name)
 
     def synthesize_contract_refactor(
         self,
@@ -82,16 +84,26 @@ class MuseSparkClient:
 
         if self.api_key and self.api_key != "MOCK":
             try:
-                return self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2))
+                res = self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2), task_name="synthesize_contract_refactor")
+                res["cost_metrics"] = self.cost_tracker.get_task_summary()
+                return res
             except Exception as e:
                 print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local AST synthesizer.")
 
-        return self._generic_ast_contract_synthesizer(
+        res = self._generic_ast_contract_synthesizer(
             incident_error_log, breaking_changes, editable_files, previous_errors
         )
+        # Estimate usage for offline accounting
+        prompt_str = system_prompt + json.dumps(user_prompt)
+        res_str = json.dumps(res)
+        p_tokens = self.cost_tracker.estimate_tokens_from_text(prompt_str)
+        c_tokens = self.cost_tracker.estimate_tokens_from_text(res_str)
+        self.cost_tracker.record_usage(p_tokens, c_tokens, task_name="synthesize_contract_refactor")
+        res["cost_metrics"] = self.cost_tracker.get_task_summary()
+        return res
 
-    def _call_live_api(self, system_prompt: str, user_prompt: str) -> Dict[str, Any]:
-        """Invokes the Meta Model API chat completion endpoint."""
+    def _call_live_api(self, system_prompt: str, user_prompt: str, task_name: str = "llm_call") -> Dict[str, Any]:
+        """Invokes the Meta Model API chat completion endpoint and records token usage."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json"
@@ -111,6 +123,10 @@ class MuseSparkClient:
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
+            usage = data.get("usage", {})
+            p_tokens = usage.get("prompt_tokens", self.cost_tracker.estimate_tokens_from_text(system_prompt + user_prompt))
+            c_tokens = usage.get("completion_tokens", self.cost_tracker.estimate_tokens_from_text(content))
+            self.cost_tracker.record_usage(p_tokens, c_tokens, task_name=task_name)
 
             if content.startswith("```"):
                 lines = content.strip().split("\n")

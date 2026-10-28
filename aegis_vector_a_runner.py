@@ -117,8 +117,11 @@ def run_vector_a_remediation(
             previous_sandbox_error=last_error
         )
         ddl_script = synthesis["ddl_script"]
+        cost_info = synthesis.get("cost_metrics", {})
         print(f" -> Diagnosis: \"{synthesis['plan_tree_diagnosis']}\"")
         print(f" -> Synthesized Index: {synthesis['index_name']} on ({', '.join(synthesis.get('indexed_columns', []))})")
+        if cost_info:
+            print(f" -> Task Accounting ({cost_info['model']}): {cost_info['total_tokens']} tokens | Remediation Cost: {cost_info['total_cost_formatted']} (Human SRE Baseline: ${cost_info['roi_comparison']['manual_sre_triage_cost_usd']:.2f})")
 
         # Validate DDL against Safety Guardrails
         is_safe, violations = DDLSafetyGuard.validate_ddl(ddl_script)
