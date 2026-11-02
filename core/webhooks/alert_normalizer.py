@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import json
 import uuid
+import hashlib
 
 
 class AlertEventNormalizer:
@@ -101,7 +102,7 @@ class AlertEventNormalizer:
 
         if is_db_event and explicit_vector not in ("b", "api"):
             fingerprint = f"{service}:{sql_query or event_name}"
-            event_uid = str(explicit_uid or f"db-{abs(hash(fingerprint)) % 100000000:08x}")
+            event_uid = str(explicit_uid or f"db-{hashlib.sha256(fingerprint.encode('utf-8')).hexdigest()[:8]}")
             inc_id = str(raw_payload.get("incident_id") or f"INC-{ts_tag}-DB-{event_uid[-6:].upper()}")
             measured_lat = float(latency_ms) if latency_ms is not None else 2450.0
             cpu_pct = float(
@@ -181,7 +182,7 @@ class AlertEventNormalizer:
         if is_api_event:
             parsed_status = int(status_code) if (status_code and str(status_code).isdigit()) else 422
             fingerprint = f"{service}:{endpoint or 'checkout'}:{parsed_status}:{event_name or 'error'}"
-            event_uid = str(explicit_uid or f"api-{abs(hash(fingerprint)) % 100000000:08x}")
+            event_uid = str(explicit_uid or f"api-{hashlib.sha256(fingerprint.encode('utf-8')).hexdigest()[:8]}")
             inc_id = str(raw_payload.get("incident_id") or f"INC-{ts_tag}-API-{event_uid[-6:].upper()}")
             return {
                 "vector": "b",

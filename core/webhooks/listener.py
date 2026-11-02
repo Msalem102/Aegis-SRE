@@ -14,6 +14,7 @@ import asyncio
 import os
 import threading
 import time
+import hashlib
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 
 from core.config.aegis_config import AegisConfigLoader
@@ -80,23 +81,22 @@ def create_webhook_app(
     )
     base_dir = resolved_code_dir if (resolved_code_dir and os.path.isdir(resolved_code_dir)) else config_dir
 
-    processed_uids: Set[str] = set()
+    active_uids: Set[str] = set()
+    last_handled_time: Dict[str, float] = {}
     incident_history: List[Dict[str, Any]] = []
     remediation_lock = threading.Lock()
+    COOLDOWN_SECONDS = 15.0
 
     def _dispatch_remediation(classified: Dict[str, Any]) -> Dict[str, Any]:
         uid = classified["event_uid"]
         with remediation_lock:
-            if uid in processed_uids:
-                return {"status": "DUPLICATE_IGNORED", "event_uid": uid}
-            processed_uids.add(uid)
-
-            record = execute_classified_remediation(classified, config_path=config_path)
-            incident_history.append(record)
-            if record.get("status") == "FAILED":
-                # Release lock on this UID so that once fixed, subsequent events/surges can re-remediate
-                processed_uids.discard(uid)
-            return record
+            try:
+                record = execute_classified_remediation(classified, config_path=config_path)
+                incident_history.append(record)
+                return record
+            finally:
+                last_handled_time[uid] = time.time()
+                active_uids.discard(uid)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -136,13 +136,25 @@ def create_webhook_app(
                                     is_initial_poll = False
                                 elif current_reads > prev_reads:
                                     query_sig = discovered.get("pg_stat_statements_summary", {}).get("query", "")
-                                    sig_uid = f"watchdog-{abs(hash(query_sig))}"
-                                    if query_sig and sig_uid not in processed_uids:
+                                    sig_uid = f"watchdog-{hashlib.sha256(query_sig.encode('utf-8')).hexdigest()[:8]}"
+                                    now = time.time()
+                                    if (
+                                        query_sig
+                                        and sig_uid not in active_uids
+                                        and (now - last_handled_time.get(sig_uid, 0.0)) >= COOLDOWN_SECONDS
+                                    ):
                                         print(f"⚡ [Aegis Direct DB Watchdog] Active unindexed sequential scan surge detected on '{manifest.project.service_name}' (+{current_reads - prev_reads} tuples read)!", flush=True)
+                                        active_uids.add(sig_uid)
                                         await asyncio.to_thread(
                                             _dispatch_remediation,
                                             {"vector": "a", "event_uid": sig_uid, "payload": discovered}
                                         )
+                                        try:
+                                            fresh_status = await asyncio.to_thread(inspector.discover_slow_query_telemetry, base_dir)
+                                            if fresh_status:
+                                                last_seq_snapshot[hot_table] = int(fresh_status.get("pg_stat_statements_summary", {}).get("seq_tuples_read", current_reads))
+                                        except Exception:
+                                            pass
                                         print(f"\n📡 [Aegis Direct DB Watchdog] Remediation cycle finished. Resuming active monitoring (polling every {interval}s)...\n", flush=True)
                             else:
                                 is_initial_poll = False
@@ -205,14 +217,25 @@ def create_webhook_app(
                 "detail": "Payload did not match database outage or API contract failure criteria."
             }
 
-        if classified["event_uid"] in processed_uids:
+        uid = classified["event_uid"]
+        now = time.time()
+
+        if uid in active_uids:
             return {
                 "status": "DUPLICATE_IGNORED",
-                "event_uid": classified["event_uid"]
+                "event_uid": uid,
+                "message": "Remediation already actively running for this incident signature."
             }
 
-        # Immediately mark UID to prevent race conditions from concurrent duplicate bursts
-        processed_uids.add(classified["event_uid"])
+        if (now - last_handled_time.get(uid, 0.0)) < COOLDOWN_SECONDS:
+            return {
+                "status": "DUPLICATE_IGNORED",
+                "event_uid": uid,
+                "message": f"Incident signature recently remediated (within {COOLDOWN_SECONDS}s debounce window)."
+            }
+
+        # Mark active immediately to prevent race conditions from concurrent duplicate bursts
+        active_uids.add(uid)
 
         if sync:
             result = await asyncio.to_thread(_dispatch_remediation, classified)
@@ -220,22 +243,25 @@ def create_webhook_app(
 
         # When deployed on Modal Serverless, spawn an independent cloud worker so the HTTP container can scale to zero immediately
         if async_spawner is not None:
-            processed_uids.add(classified["event_uid"])
-            call_handle = async_spawner(classified, config_path)
-            call_id = getattr(call_handle, "object_id", None)
-            return {
-                "status": "ACCEPTED_SERVERLESS_SPAWNED",
-                "vector": classified["vector"],
-                "event_uid": classified["event_uid"],
-                "incident_id": classified["payload"].get("incident_id"),
-                "modal_call_id": call_id
-            }
+            try:
+                call_handle = async_spawner(classified, config_path)
+                call_id = getattr(call_handle, "object_id", None)
+                return {
+                    "status": "ACCEPTED_SERVERLESS_SPAWNED",
+                    "vector": classified["vector"],
+                    "event_uid": uid,
+                    "incident_id": classified["payload"].get("incident_id"),
+                    "modal_call_id": call_id
+                }
+            finally:
+                active_uids.discard(uid)
+                last_handled_time[uid] = time.time()
 
         background_tasks.add_task(_dispatch_remediation, classified)
         return {
             "status": "ACCEPTED_REMEDIATING",
             "vector": classified["vector"],
-            "event_uid": classified["event_uid"],
+            "event_uid": uid,
             "incident_id": classified["payload"].get("incident_id")
         }
 

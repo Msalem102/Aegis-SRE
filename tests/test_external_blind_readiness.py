@@ -358,3 +358,9 @@ def test_alert_event_normalizer_and_webhook_server():
     assert body["vector"] == "b"
     assert body["modal_call_id"] == "fc-modal-test-call-001"
     assert len(spawned_calls) == 1
+
+    # 5. Immediate duplicate burst receives DUPLICATE_IGNORED
+    dup_resp = client.post("/webhooks/alert", json=api_alert)
+    assert dup_resp.status_code == 200
+    assert dup_resp.json()["status"] == "DUPLICATE_IGNORED"
+    assert len(spawned_calls) == 1

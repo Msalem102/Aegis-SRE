@@ -70,6 +70,21 @@ def run_vector_b_remediation(
     api_cfg = manifest.upstream_apis[0] if manifest.upstream_apis else None
 
     if not api_cfg and not client_repo_path and not v2_spec_path:
+        alt_path = os.path.join(config_dir, "mockstore_aegis.yaml")
+        if os.path.exists(alt_path):
+            alt_manifest = AegisConfigLoader.load_or_default(alt_path)
+            if alt_manifest.upstream_apis:
+                manifest = alt_manifest
+                api_cfg = alt_manifest.upstream_apis[0]
+                config_path = alt_path
+                resolved_code_dir = (
+                    AegisConfigLoader.resolve_path(config_dir, manifest.project.code_dir)
+                    if manifest.project.code_dir
+                    else None
+                )
+                base_dir = resolved_code_dir if (resolved_code_dir and os.path.isdir(resolved_code_dir)) else config_dir
+
+    if not api_cfg and not client_repo_path and not v2_spec_path:
         raise RuntimeError(
             f"No 'upstream_apis' entries configured in '{config_path}'. "
             "Add an upstream API contract configuration to run Vector B remediation."
