@@ -323,6 +323,18 @@ def test_alert_event_normalizer_and_webhook_server():
     assert norm_a["vector"] == "a"
     assert "SELECT * FROM orders" in norm_a["payload"]["pg_stat_statements_summary"]["query"]
 
+    # 2b. Database connection pool exhaustion 503 -> Vector A
+    pool_alert = {
+        "event": "connection_pool_exhausted",
+        "service": "cupertino-coffee-store",
+        "http_status": 503,
+        "error_message": "Database Connection Pool Exhausted: 15 connections occupied",
+        "query": "SELECT * FROM orders WHERE customer_id = $1"
+    }
+    norm_pool = AlertEventNormalizer.classify_and_normalize(pool_alert)
+    assert norm_pool is not None
+    assert norm_pool["vector"] == "a"
+
     # 3. Benign health heartbeat -> Ignored
     assert AlertEventNormalizer.classify_and_normalize({"event": "heartbeat_ok", "uptime_s": 3600}) is None
 

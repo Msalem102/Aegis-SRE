@@ -17,7 +17,8 @@ class AlertEventNormalizer:
 
     DB_EVENT_KEYWORDS = {
         "slow_query", "db_slow_query", "db_timeout", "postgres_slow_query",
-        "latency_breach", "seq_scan", "pg_slow_query_breach", "critical_cpu_spike"
+        "latency_breach", "seq_scan", "pg_slow_query_breach", "critical_cpu_spike",
+        "pool_exhausted", "db_pool_exhausted", "connection_pool_exhausted"
     }
     API_EVENT_KEYWORDS = {
         "api_error", "contract_drift", "http_error", "validation_error",
@@ -97,6 +98,12 @@ class AlertEventNormalizer:
             or "seq_scan" in event_name.lower()
             or "database" in event_name.lower()
             or (status_code is not None and str(status_code).isdigit() and int(status_code) == 504)
+            or (
+                status_code is not None
+                and str(status_code).isdigit()
+                and int(status_code) in (503, 504)
+                and any(k in str(raw_payload).lower() for k in ("db", "database", "postgres", "pool", "connection"))
+            )
             or (latency_ms is not None and float(latency_ms) >= 1000.0 and not status_code)
         )
 
