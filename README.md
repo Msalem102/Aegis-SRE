@@ -146,8 +146,10 @@ GITHUB_TOKEN=ghp_your_github_personal_access_token
 
 Verify connectivity:
 ```bash
-python verify_meta_api.py   # Verifies Meta Muse Spark API
-python verify_modal.py      # Verifies Modal Cloud micro-VM provisioning
+# Verify all 3 core external integrations (Meta Model API, Modal Cloud, GitHub)
+python verify_apis.py
+# or via CLI:
+python aegis_cli.py verify
 ```
 
 ### Step 4: Initialize & Audit `aegis.yaml`
