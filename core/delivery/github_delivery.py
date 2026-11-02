@@ -17,11 +17,21 @@ import json
 import uuid
 import httpx
 from datetime import datetime, timezone
+from dotenv import load_dotenv
+
+_root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+if os.path.exists(_root_env):
+    load_dotenv(dotenv_path=_root_env, override=True)
+else:
+    load_dotenv(override=True)
 
 
 class GitHubDeliveryEngine:
     def __init__(self, github_token: Optional[str] = None, client: Optional[httpx.Client] = None):
-        self.github_token = github_token or os.getenv("GITHUB_TOKEN")
+        if os.path.exists(_root_env):
+            load_dotenv(dotenv_path=_root_env, override=True)
+        raw_token = github_token or os.getenv("GITHUB_TOKEN") or ""
+        self.github_token = raw_token.strip().strip('"').strip("'") or None
         self._custom_client = client
 
     def generate_diff(self, original_files: Dict[str, str], refactored_files: Dict[str, str]) -> str:

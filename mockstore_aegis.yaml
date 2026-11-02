@@ -2,8 +2,8 @@ version: "1.0"
 
 project:
   service_name: "cupertino-coffee-store"
-  repository: "meta-sre/cupertino-coffee"
-  default_branch: "main"
+  repository: "ahmedharib/mockStore"
+  default_branch: "master"
   code_dir: "C:/Users/ahmed/Desktop/mockStore"
   read_only_source: true
 
