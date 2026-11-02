@@ -10,6 +10,7 @@ Synthesizes optimal zero-downtime PostgreSQL DDL without any hardcoded table or 
 
 from typing import Dict, Any, List, Optional
 import os
+import sys
 import re
 import json
 import time
@@ -18,7 +19,17 @@ from dotenv import load_dotenv
 from core.db.safety_guard import DDLSafetyGuard
 from core.telemetry.cost_tracker import CostTracker
 
-load_dotenv()
+if sys.stdout.encoding != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+_root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+if os.path.exists(_root_env):
+    load_dotenv(dotenv_path=_root_env, override=True)
+else:
+    load_dotenv(override=True)
 
 
 class MuseDBClient:
@@ -28,9 +39,14 @@ class MuseDBClient:
         base_url: Optional[str] = None,
         model_name: Optional[str] = None
     ):
-        self.api_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY")
-        self.base_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
-        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark-1.2"
+        if os.path.exists(_root_env):
+            load_dotenv(dotenv_path=_root_env, override=True)
+        raw_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY") or ""
+        self.api_key = raw_key.strip().strip('"').strip("'")
+        raw_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
+        self.base_url = raw_url.strip().strip('"').strip("'").rstrip("/")
+        raw_model = model_name or os.getenv("META_MODEL_NAME") or "muse-spark-1.2"
+        self.model_name = raw_model.strip().strip('"').strip("'")
         self.cost_tracker = CostTracker(model_name=self.model_name)
 
     def synthesize_database_remediation(
@@ -91,14 +107,22 @@ class MuseDBClient:
                 response["cost_metrics"] = self.cost_tracker.get_task_summary()
                 return response
             except Exception as e:
-                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local SQL AST analyzer.")
+                raise RuntimeError(
+                    f"Meta Model API call failed ({e}). Live Meta Muse Spark reasoning is required for autonomous remediation. "
+                    "Please verify that META_API_KEY and META_MODEL_API_URL in .env are valid and authorized."
+                ) from e
 
-        response = self._generic_sql_ast_reasoner(outage_alert, query, table_catalog, raw_explain_plan)
-        p_tokens = self.cost_tracker.estimate_tokens_from_text(system_prompt + json.dumps(user_prompt))
-        c_tokens = self.cost_tracker.estimate_tokens_from_text(json.dumps(response))
-        self.cost_tracker.record_usage(p_tokens, c_tokens, task_name="synthesize_database_remediation")
-        response["cost_metrics"] = self.cost_tracker.get_task_summary()
-        return response
+        if self.api_key == "MOCK":
+            response = self._generic_sql_ast_reasoner(outage_alert, query, table_catalog, raw_explain_plan)
+            p_tokens = self.cost_tracker.estimate_tokens_from_text(system_prompt + json.dumps(user_prompt))
+            c_tokens = self.cost_tracker.estimate_tokens_from_text(json.dumps(response))
+            self.cost_tracker.record_usage(p_tokens, c_tokens, task_name="synthesize_database_remediation")
+            response["cost_metrics"] = self.cost_tracker.get_task_summary()
+            return response
+
+        raise RuntimeError(
+            "META_API_KEY is not configured in .env. Live Meta Muse Spark reasoning is required for autonomous remediation."
+        )
 
     def _call_live_api(self, system_prompt: str, user_prompt: str, task_name: str = "llm_call") -> Dict[str, Any]:
         headers = {
@@ -115,9 +139,10 @@ class MuseDBClient:
             "response_format": {"type": "json_object"}
         }
 
-        print(f"   🧠 [Meta Model API] Dispatching live prompt to '{self.model_name}' at {self.base_url}...")
+        masked_key = f"{self.api_key[:6]}...{self.api_key[-4:]}" if len(self.api_key) > 10 else ("None" if not self.api_key else self.api_key)
+        print(f"   🧠 [Meta Model API] Dispatching live prompt to '{self.model_name}' at {self.base_url} [Key: {masked_key}] (generating reasoning & DDL)...", flush=True)
         start_t = time.perf_counter()
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=90.0) as client:
             resp = client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
             elapsed = round(time.perf_counter() - start_t, 2)
@@ -127,7 +152,7 @@ class MuseDBClient:
             p_tokens = usage.get("prompt_tokens", self.cost_tracker.estimate_tokens_from_text(system_prompt + user_prompt))
             c_tokens = usage.get("completion_tokens", self.cost_tracker.estimate_tokens_from_text(content))
             self.cost_tracker.record_usage(p_tokens, c_tokens, task_name=task_name)
-            print(f"   🧠 [Meta Model API] Response received in {elapsed}s | Tokens: {p_tokens} prompt + {c_tokens} completion")
+            print(f"   🧠 [Meta Model API] Response received in {elapsed}s | Tokens: {p_tokens} prompt + {c_tokens} completion", flush=True)
 
             if content.startswith("```"):
                 lines = content.strip().split("\n")
@@ -259,6 +284,29 @@ class MuseDBClient:
                         ):
                             include_cols.append(actual_col)
 
+        # Detect joined tables and synthesize foreign key indexes for unindexed joins
+        join_ddls = []
+        seen_join_indexes = set()
+        if parsed_via_ast:
+            try:
+                for join_node in parsed.find_all(exp.Join):
+                    join_tbl_node = join_node.this
+                    join_tbl = getattr(join_tbl_node, "name", None) or str(join_tbl_node).split()[-1].strip('"')
+                    join_tbl_alias = str(getattr(join_tbl_node, "alias", "") or join_node.alias or join_tbl)
+                    for col_node in join_node.find_all(exp.Column):
+                        c_table = col_node.table
+                        c_name = col_node.name
+                        if (c_table and c_table in (join_tbl, join_tbl_alias)) or (not c_table and c_name.endswith("_id")):
+                            key = (join_tbl.lower(), c_name.lower())
+                            if key not in seen_join_indexes:
+                                seen_join_indexes.add(key)
+                                idx_name = f"idx_{join_tbl}_{c_name}".lower()
+                                join_ddls.append(
+                                    f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {idx_name}\nON {join_tbl} ({c_name});"
+                                )
+            except Exception:
+                pass
+
         indexed_columns = where_cols + order_specs
         if not indexed_columns and valid_columns:
             indexed_columns = [next(iter(valid_columns.values()))]
@@ -271,6 +319,8 @@ class MuseDBClient:
             f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {index_name}\n"
             f"ON {table_name} ({', '.join(indexed_columns)}){include_clause};"
         )
+        if join_ddls:
+            raw_ddl += "\n\n" + "\n\n".join(join_ddls)
         safe_ddl = DDLSafetyGuard.enforce_safety_envelope(raw_ddl)
 
         row_count = table_catalog.get("row_count", "all")

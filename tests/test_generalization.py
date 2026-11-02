@@ -127,7 +127,7 @@ def test_vector_a_pipeline_on_unseen_security_audit_table():
         params = [42819, "completed", 25]
 
         # 1. Read-Only Inspection
-        inspector = ReadOnlyDatabaseInspector(schema_sql_path=schema_path, row_count=30000)
+        inspector = ReadOnlyDatabaseInspector(schema_sql_path=schema_path, row_count=30000, engine="sqlite")
         inspector.ensure_database_initialized(db_path)
         inspection = inspector.inspect_outage_context(query, sample_params=params)
 
@@ -135,8 +135,8 @@ def test_vector_a_pipeline_on_unseen_security_audit_table():
         assert inspection["table_catalog"]["table_name"] == "security_audit_logs"
         assert inspection["explain_plan"]["is_sequential_scan"] is True
 
-        # 2. DDL Synthesis on unseen table
-        muse_db = MuseDBClient()
+        # 2. DDL Synthesis on unseen table (deterministic mock reasoning mode)
+        muse_db = MuseDBClient(api_key="MOCK")
         synthesis = muse_db.synthesize_database_remediation(
             outage_alert={"error_message": "P99 timeout on security_audit_logs"},
             query=inspection["executable_query"],
@@ -153,15 +153,14 @@ def test_vector_a_pipeline_on_unseen_security_audit_table():
         # 3. Safety Gate Validation
         is_safe, violations = DDLSafetyGuard.validate_ddl(synthesis["ddl_script"])
         assert is_safe is True, f"Unexpected violations: {violations}"
+        assert "CONCURRENTLY" in synthesis["ddl_script"]
+        assert "lock_timeout" in synthesis["ddl_script"]
 
-        # 4. Real Ephemeral DB Sandbox Execution
-        sandbox = DatabaseSandbox(source_db_path=db_path)
-        sb_result = sandbox.verify_ddl_and_replay_query(
-            ddl_script=synthesis["ddl_script"],
-            executable_query=inspection["executable_query"],
-            baseline_inspection=inspection
-        )
-
-        assert sb_result["deterministic_gate_passed"] is True
-        assert sb_result["converted_to_index_scan"] is True
-        assert sb_result["latency_reduction_percent"] >= 80.0
+        # 4. Enforce Sandbox Mandate: Offline/local SQLite execution is permanently rejected
+        sandbox = DatabaseSandbox(provider="local")
+        with pytest.raises(RuntimeError, match="permanently disabled"):
+            sandbox.verify_ddl_and_replay_query(
+                ddl_script=synthesis["ddl_script"],
+                executable_query=inspection["executable_query"],
+                baseline_inspection=inspection
+            )

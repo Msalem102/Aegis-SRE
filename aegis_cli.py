@@ -1,17 +1,29 @@
 """
 Aegis SRE Unified CLI (`aegis_cli.py`).
 Provides project onboarding, contract compliance verification (`aegis.yaml`),
-and autonomous remediation orchestration for any conforming project.
+autonomous remediation orchestration, live alert/DB watchdog listening, and
+zero-idle-cost Modal Cloud serverless deployment.
 
 Usage:
-  python aegis_cli.py check [--config aegis.yaml]
-  python aegis_cli.py init  [--output aegis.yaml]
-  python aegis_cli.py run   --vector [a|b|all] [--config aegis.yaml]
+  python aegis_cli.py check  [--config aegis.yaml]
+  python aegis_cli.py init   [--output aegis.yaml]
+  python aegis_cli.py run    --vector [a|b|all] [--config aegis.yaml]
+  python aegis_cli.py listen [--config aegis.yaml] [--port 8080] [--watchdog]
+  python aegis_cli.py deploy [--config aegis.yaml]
 """
 
 import sys
 import os
 import argparse
+import subprocess
+from typing import Optional
+from dotenv import load_dotenv
+
+_cli_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+if os.path.exists(_cli_env):
+    load_dotenv(dotenv_path=_cli_env, override=True)
+else:
+    load_dotenv(override=True)
 
 if sys.stdout.encoding != "utf-8":
     try:
@@ -105,22 +117,73 @@ def cmd_init(output_path: str, overwrite: bool = False) -> int:
     return 0
 
 
-def cmd_run(vector: str, config_path: str) -> int:
+def cmd_run(vector: str, config_path: str, query: Optional[str] = None) -> int:
     code = cmd_check(config_path)
     if code != 0:
         print("Aborting execution due to contract compliance failure.")
         return code
 
     v = vector.lower()
-    if v in ("a", "db", "all"):
-        from aegis_vector_a_runner import run_vector_a_remediation
-        run_vector_a_remediation(config_path=config_path)
+    try:
+        if v in ("a", "db", "all"):
+            from aegis_vector_a_runner import run_vector_a_remediation
+            alert_override = None
+            if query:
+                alert_override = {
+                    "incident_id": "INC-CLI-ON-DEMAND",
+                    "service": "cli-query-trigger",
+                    "pg_stat_statements_summary": {"query": query.strip()},
+                    "anomaly_trigger": {"current_value": 3200.0, "threshold": 1000.0, "host_cpu_percent": 91.0}
+                }
+            run_vector_a_remediation(config_path=config_path, alert_payload_override=alert_override)
 
-    if v in ("b", "api", "all"):
-        from aegis_vector_b_runner import run_vector_b_remediation
-        run_vector_b_remediation(config_path=config_path)
+        if v in ("b", "api", "all"):
+            from aegis_vector_b_runner import run_vector_b_remediation
+            run_vector_b_remediation(config_path=config_path)
+    except Exception as e:
+        print(f"❌ Remediation failed: {e}")
+        return 1
 
     return 0
+
+
+def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchdog: bool = False) -> int:
+    code = cmd_check(config_path)
+    if code != 0:
+        print("Aborting webhook daemon startup due to contract compliance failure.")
+        return code
+
+    import uvicorn
+    from core.webhooks.listener import create_webhook_app
+
+    print("=" * 78)
+    print(f"🛡️  AEGIS SRE Autonomous Webhook & Watchdog Daemon Listening on http://{host}:{port}")
+    print(f"   • Alert Webhook URL:   http://localhost:{port}/webhooks/alert")
+    print(f"   • Health Check URL:    http://localhost:{port}/health")
+    print(f"   • Direct DB Watchdog:  {'ENABLED' if watchdog else 'DISABLED (pass --watchdog to enable)'}")
+    print("=" * 78)
+
+    app = create_webhook_app(config_path=config_path, enable_db_watchdog=watchdog)
+    uvicorn.run(app, host=host, port=port)
+    return 0
+
+
+def cmd_deploy(config_path: str) -> int:
+    code = cmd_check(config_path)
+    if code != 0:
+        print("Aborting serverless deployment due to contract compliance failure.")
+        return code
+
+    serverless_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), "aegis_serverless.py")
+    print("=" * 78)
+    print("☁️  Deploying Zero-Idle-Cost Aegis SRE Daemon to Modal Cloud...")
+    print(f"   • Manifest:  {config_path}")
+    print("   • Endpoints: Scale-to-Zero HTTPS Alert Webhook + 30-min Read-Only DB Watchdog")
+    print("=" * 78)
+
+    deploy_env = {**os.environ, "AEGIS_DEPLOY_CONFIG": config_path}
+    res = subprocess.run([sys.executable, "-m", "modal", "deploy", serverless_file], env=deploy_env)
+    return res.returncode
 
 
 def main() -> int:
@@ -140,6 +203,18 @@ def main() -> int:
     p_run = subparsers.add_parser("run", help="Run autonomous remediation using aegis.yaml")
     p_run.add_argument("--vector", choices=["a", "b", "db", "api", "all"], default="all", help="Remediation vector to execute")
     p_run.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
+    p_run.add_argument("--query", default=None, help="Optional offending SQL query to remediate on-demand")
+
+    # listen
+    p_listen = subparsers.add_parser("listen", help="Start live Alert webhook & optional Direct DB Watchdog daemon")
+    p_listen.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
+    p_listen.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    p_listen.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
+    p_listen.add_argument("--watchdog", action="store_true", help="Actively monitor PostgreSQL read-only telemetry in background")
+
+    # deploy
+    p_deploy = subparsers.add_parser("deploy", help="Deploy zero-idle-cost scale-to-zero Aegis SRE daemon onto Modal Cloud")
+    p_deploy.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
 
     args = parser.parse_args()
 
@@ -148,7 +223,11 @@ def main() -> int:
     elif args.command == "init":
         return cmd_init(args.output, overwrite=args.force)
     elif args.command == "run":
-        return cmd_run(args.vector, args.config)
+        return cmd_run(args.vector, args.config, query=args.query)
+    elif args.command == "listen":
+        return cmd_listen(args.config, host=args.host, port=args.port, watchdog=args.watchdog)
+    elif args.command == "deploy":
+        return cmd_deploy(args.config)
     else:
         parser.print_help()
         return 0

@@ -2,8 +2,10 @@
 Aegis SRE Project Integration Contract (`aegis.yaml`) Parser & Compliance Validator.
 Enables any external repository or service to onboard onto Aegis SRE:
 1. Database Layer: Read-Only Database Inspection access (`mode=ro`) + SLA thresholds.
+   Supports live PostgreSQL catalog introspection & slow-query discovery or local schema/telemetry files.
 2. API Layer: Autonomous codebase scanning (no manual client file listing required) +
-   live OpenAPI spec URL (or pure error-driven inference from HTTP 4xx/5xx logs).
+   live OpenAPI spec URL, local spec file, or pure error-driven inference from HTTP 4xx/5xx logs.
+3. Continuous Monitoring Layer: Scale-to-zero Modal Serverless Alert Webhooks & Direct Read-Only DB Watchdog.
 """
 
 from typing import List, Dict, Any, Optional
@@ -11,6 +13,10 @@ import os
 import json
 import yaml
 from pydantic import BaseModel, Field
+
+
+LIVE_TELEMETRY_MODES = {"auto", "webhook", "pg_stat_statements"}
+LIVE_SCHEMA_MODES = {"auto", "live", "information_schema"}
 
 
 class SLAThresholdsConfig(BaseModel):
@@ -22,10 +28,20 @@ class SLAThresholdsConfig(BaseModel):
 class DatabaseIntegrationConfig(BaseModel):
     engine: str = Field(default="postgres", description="Database engine: postgres or sqlite")
     read_only_connection_env: str = Field(default="DATABASE_RO_URL")
+    connection_url: Optional[str] = Field(default=None, description="Direct database connection URL (or use read_only_connection_env)")
     require_read_only_mode: bool = Field(default=True)
-    schema_path: str = Field(default="scenarios/vector_a_db/schema.sql")
-    live_db_path: str = Field(default="scenarios/vector_a_db/live_production_sim.db")
-    telemetry_source: str = Field(default="scenarios/vector_a_db/incident_telemetry.json")
+    schema_path: Optional[str] = Field(
+        default="auto",
+        description="Optional path to schema.sql, or 'auto' to introspect live PostgreSQL catalog via read-only connection"
+    )
+    live_db_path: Optional[str] = Field(
+        default=None,
+        description="Optional SQLite database file path when inspecting an external SQLite database"
+    )
+    telemetry_source: Optional[str] = Field(
+        default="auto",
+        description="Telemetry source: 'auto' (live pg_stat_statements / pg_stat_user_tables), 'webhook', or path to JSON alert"
+    )
     migration_output_dir: str = Field(default="migrations")
     sla_thresholds: SLAThresholdsConfig = Field(default_factory=SLAThresholdsConfig)
     max_healing_retries: int = Field(default=3, ge=1, le=5)
@@ -39,7 +55,7 @@ class UpstreamAPIContractConfig(BaseModel):
     )
     baseline_spec: Optional[str] = Field(
         default=None,
-        description="Optional path to cached baseline OpenAPI spec"
+        description="Optional URL or path to cached baseline OpenAPI spec"
     )
     target_spec: Optional[str] = Field(
         default=None,
@@ -64,16 +80,23 @@ class UpstreamAPIContractConfig(BaseModel):
         return self.spec_url or self.target_spec
 
 
+class ObservabilityConfig(BaseModel):
+    provider: str = Field(default="direct", description="Monitoring mode: direct (PostgreSQL catalog & alert webhook) or webhook")
+    watchdog_interval_seconds: int = Field(default=60, ge=5, le=3600)
+
+
 class SandboxConfig(BaseModel):
-    provider: str = Field(default="modal", description="Execution provider: modal, local, or auto")
+    provider: str = Field(default="modal", description="Execution provider: modal (Modal Cloud micro-VMs) or postgres (dedicated PostgreSQL URL)")
     app_name: str = Field(default="aegis-sre")
-    timeout_seconds: int = Field(default=60, ge=10, le=600)
+    timeout_seconds: int = Field(default=120, ge=10, le=600)
 
 
 class ProjectMetadataConfig(BaseModel):
-    service_name: str = Field(default="novacart-ecommerce")
-    repository: str = Field(default="meta-sre/novacart")
+    service_name: str = Field(default="cupertino-coffee-store")
+    repository: str = Field(default="meta-sre/cupertino-coffee")
     default_branch: str = Field(default="main")
+    code_dir: Optional[str] = Field(default=None, description="Path to target project directory when config is stored externally")
+    read_only_source: bool = Field(default=False, description="When True, Aegis will never write reports or migrations to code_dir; outputs are saved to workspace artifacts")
 
 
 class AegisContractManifest(BaseModel):
@@ -81,6 +104,7 @@ class AegisContractManifest(BaseModel):
     project: ProjectMetadataConfig = Field(default_factory=ProjectMetadataConfig)
     database: Optional[DatabaseIntegrationConfig] = None
     upstream_apis: List[UpstreamAPIContractConfig] = Field(default_factory=list)
+    observability: Optional[ObservabilityConfig] = None
     sandbox: SandboxConfig = Field(default_factory=SandboxConfig)
 
 
@@ -88,6 +112,20 @@ class AegisConfigLoader:
     """Loads, parses, and validates `aegis.yaml` project integration manifests."""
 
     DEFAULT_MANIFEST_PATH = "aegis.yaml"
+
+    @staticmethod
+    def resolve_path(base_dir: str, path_or_url: Optional[str]) -> Optional[str]:
+        """Resolves a manifest-relative path against `aegis.yaml`'s directory, preserving URLs & live mode keywords."""
+        if not path_or_url:
+            return None
+        stripped = path_or_url.strip()
+        if stripped.lower() in (LIVE_TELEMETRY_MODES | LIVE_SCHEMA_MODES):
+            return stripped
+        if stripped.startswith(("http://", "https://")):
+            return stripped
+        if os.path.isabs(stripped):
+            return os.path.normpath(stripped)
+        return os.path.normpath(os.path.join(base_dir, stripped))
 
     @classmethod
     def load(cls, config_path: Optional[str] = None) -> AegisContractManifest:
@@ -109,17 +147,10 @@ class AegisConfigLoader:
             except Exception:
                 pass
         return AegisContractManifest(
-            database=DatabaseIntegrationConfig(),
-            upstream_apis=[
-                UpstreamAPIContractConfig(
-                    name="stripe_payment_gateway",
-                    baseline_spec="scenarios/vector_b_contract/upstream/openapi_v1.json",
-                    spec_url="scenarios/vector_b_contract/upstream/openapi_v2_breaking.json",
-                    client_repo_root="scenarios/vector_b_contract/client_repo",
-                    code_root="src",
-                    test_target="tests"
-                )
-            ]
+            database=DatabaseIntegrationConfig(
+                schema_path="auto",
+                telemetry_source="auto",
+            )
         )
 
     @classmethod
@@ -130,12 +161,15 @@ class AegisConfigLoader:
     ) -> Dict[str, Any]:
         """
         Verifies that the target project satisfies all Aegis SRE architectural contracts:
-        1. Read-Only DB access mandate (`require_read_only_mode=True`) and valid schema/telemetry files.
+        1. Read-Only DB access mandate (`require_read_only_mode=True`) and valid schema/telemetry configuration.
         2. Autonomous API discovery (verifies code_root exists with source files, no forced client file micromanagement).
         3. Spec resolution (supports live spec URL, local spec path, or zero-spec error-driven inference).
         """
         checks: List[Dict[str, Any]] = []
         errors: List[str] = []
+
+        if manifest.project.code_dir:
+            base_dir = cls.resolve_path(base_dir, manifest.project.code_dir) or base_dir
 
         # 1. Project Metadata Check
         if manifest.project.service_name and "/" in manifest.project.repository:
@@ -175,48 +209,68 @@ class AegisConfigLoader:
                     "detail": f"Enforced via env '{db.read_only_connection_env}' ({db.engine})"
                 })
 
-            schema_full = os.path.join(base_dir, db.schema_path)
-            if os.path.exists(schema_full):
+            if not db.schema_path or db.schema_path.strip().lower() in LIVE_SCHEMA_MODES:
                 checks.append({
                     "category": "DATABASE_CONTRACT",
                     "name": "Database Schema Definition",
                     "passed": True,
-                    "detail": f"Found {db.schema_path}"
+                    "detail": "Live Read-Only Catalog Introspection enabled (information_schema / pg_indexes)"
                 })
             else:
-                msg = f"Database schema file missing: {db.schema_path}"
-                errors.append(msg)
-                checks.append({
-                    "category": "DATABASE_CONTRACT",
-                    "name": "Database Schema Definition",
-                    "passed": False,
-                    "detail": msg
-                })
+                schema_full = cls.resolve_path(base_dir, db.schema_path)
+                if schema_full and os.path.exists(schema_full):
+                    checks.append({
+                        "category": "DATABASE_CONTRACT",
+                        "name": "Database Schema Definition",
+                        "passed": True,
+                        "detail": f"Found {db.schema_path}"
+                    })
+                else:
+                    msg = f"Database schema file missing: {db.schema_path}"
+                    errors.append(msg)
+                    checks.append({
+                        "category": "DATABASE_CONTRACT",
+                        "name": "Database Schema Definition",
+                        "passed": False,
+                        "detail": msg
+                    })
 
-            telemetry_full = os.path.join(base_dir, db.telemetry_source)
-            if os.path.exists(telemetry_full):
+            if not db.telemetry_source or db.telemetry_source.strip().lower() in LIVE_TELEMETRY_MODES:
+                mode_label = db.telemetry_source or "auto"
                 checks.append({
                     "category": "DATABASE_CONTRACT",
                     "name": "Observability Telemetry Hook",
                     "passed": True,
                     "detail": (
-                        f"Found {db.telemetry_source} "
+                        f"Live telemetry discovery enabled ({mode_label}) "
                         f"(SLAs: P99 <= {db.sla_thresholds.p99_latency_ms}ms, CPU <= {db.sla_thresholds.max_cpu_percent}%)"
                     )
                 })
             else:
-                msg = f"Database telemetry source missing: {db.telemetry_source}"
-                errors.append(msg)
-                checks.append({
-                    "category": "DATABASE_CONTRACT",
-                    "name": "Observability Telemetry Hook",
-                    "passed": False,
-                    "detail": msg
-                })
+                telemetry_full = cls.resolve_path(base_dir, db.telemetry_source)
+                if telemetry_full and os.path.exists(telemetry_full):
+                    checks.append({
+                        "category": "DATABASE_CONTRACT",
+                        "name": "Observability Telemetry Hook",
+                        "passed": True,
+                        "detail": (
+                            f"Found {db.telemetry_source} "
+                            f"(SLAs: P99 <= {db.sla_thresholds.p99_latency_ms}ms, CPU <= {db.sla_thresholds.max_cpu_percent}%)"
+                        )
+                    })
+                else:
+                    msg = f"Database telemetry source missing: {db.telemetry_source}"
+                    errors.append(msg)
+                    checks.append({
+                        "category": "DATABASE_CONTRACT",
+                        "name": "Observability Telemetry Hook",
+                        "passed": False,
+                        "detail": msg
+                    })
 
         # 3. Autonomous API Contract Checks
         for api in manifest.upstream_apis:
-            repo_full = os.path.join(base_dir, api.client_repo_root)
+            repo_full = cls.resolve_path(base_dir, api.client_repo_root) or base_dir
             if not os.path.isdir(repo_full):
                 msg = f"[{api.name}] Client repository root directory not found: {api.client_repo_root}"
                 errors.append(msg)
@@ -233,7 +287,8 @@ class AegisConfigLoader:
             scan_target_full = os.path.join(repo_full, scan_target_rel)
             if os.path.exists(scan_target_full):
                 py_files = []
-                for root, _, files in os.walk(scan_target_full):
+                for root, dirs, files in os.walk(scan_target_full):
+                    dirs[:] = [d for d in dirs if d not in {".git", ".venv", "venv", "__pycache__", ".pytest_cache", "node_modules"}]
                     for f in files:
                         if f.endswith(".py"):
                             py_files.append(os.path.relpath(os.path.join(root, f), repo_full))
@@ -264,8 +319,8 @@ class AegisConfigLoader:
                         "detail": f"Live spec subscription configured: {effective_spec}"
                     })
                 else:
-                    spec_full = os.path.join(base_dir, effective_spec)
-                    if os.path.exists(spec_full):
+                    spec_full = cls.resolve_path(base_dir, effective_spec)
+                    if spec_full and os.path.exists(spec_full):
                         try:
                             with open(spec_full, "r", encoding="utf-8") as sf:
                                 spec_obj = json.load(sf) if spec_full.endswith(".json") else yaml.safe_load(sf)
@@ -354,21 +409,28 @@ class AegisConfigLoader:
 version: "1.0"
 
 project:
-  service_name: "novacart-ecommerce"
-  repository: "meta-sre/novacart-ecommerce"
+  service_name: "my-production-service"
+  repository: "your-org/your-repo"
   default_branch: "main"
 
 # -----------------------------------------------------------------------------
+# Continuous Monitoring & Direct Watchdog
+# -----------------------------------------------------------------------------
+observability:
+  provider: "direct"
+  watchdog_interval_seconds: 60
+
+# -----------------------------------------------------------------------------
 # Vector A: Database Performance & Zero-Downtime Indexing Contract
-# Requirement: Unmanaged or managed PostgreSQL/SQLite with Read-Only inspection
+# Requirement: PostgreSQL with strictly Read-Only inspection access
 # -----------------------------------------------------------------------------
 database:
   engine: "postgres"
   read_only_connection_env: "DATABASE_RO_URL"
   require_read_only_mode: true
-  schema_path: "scenarios/vector_a_db/schema.sql"
-  live_db_path: "scenarios/vector_a_db/live_production_sim.db"
-  telemetry_source: "scenarios/vector_a_db/incident_telemetry.json"
+  # Set to 'auto' to introspect live Postgres schema & pg_stat_statements directly:
+  schema_path: "auto"
+  telemetry_source: "auto"
   migration_output_dir: "migrations"
   max_healing_retries: 3
   sla_thresholds:
@@ -381,12 +443,11 @@ database:
 # Requirement: Autonomous AST mapping across code_root (no manual file listing)
 # -----------------------------------------------------------------------------
 upstream_apis:
-  - name: "stripe_payment_gateway"
-    # Live OpenAPI spec URL, or omit to infer drift purely from runtime 422 errors:
-    spec_url: "https://api.gateway.internal/v2/openapi.json"
-    client_repo_root: "scenarios/vector_b_contract/client_repo"
-    # Autonomous scanner targets this root (searches views, clients, models automatically):
-    code_root: "src"
+  - name: "upstream_gateway"
+    # Live OpenAPI spec URL, local file, or omit to infer drift purely from 4xx error logs:
+    spec_url: "https://api.gateway.internal/openapi.json"
+    client_repo_root: "."
+    code_root: "app"
     test_target: "tests"
     max_healing_retries: 3
 
@@ -396,5 +457,5 @@ upstream_apis:
 sandbox:
   provider: "modal"
   app_name: "aegis-sre"
-  timeout_seconds: 60
+  timeout_seconds: 120
 """

@@ -4,6 +4,7 @@ Verifies schema parsing, architectural compliance checks (Read-Only DB mode,
 Autonomous codebase scanning, and spec discovery).
 """
 
+import json
 import os
 import tempfile
 from core.config.aegis_config import (
@@ -19,12 +20,11 @@ def test_load_and_validate_root_aegis_yaml():
     """Asserts that the repository's root `aegis.yaml` loads cleanly and passes 100% of contract checks."""
     manifest = AegisConfigLoader.load("aegis.yaml")
     assert manifest.version == "1.0"
-    assert manifest.project.service_name == "novacart-ecommerce"
+    assert manifest.project.service_name == "cupertino-coffee-store"
     assert manifest.database is not None
     assert manifest.database.require_read_only_mode is True
-    assert len(manifest.upstream_apis) == 1
-    assert manifest.upstream_apis[0].get_effective_spec() is not None
-    assert manifest.upstream_apis[0].code_root == "src"
+    assert manifest.observability is not None
+    assert manifest.observability.provider == "direct"
 
     report = AegisConfigLoader.validate_project_compliance(manifest, base_dir=".")
     assert report["passed"] is True, f"Expected root aegis.yaml to pass compliance, got errors: {report['errors']}"
@@ -44,41 +44,60 @@ def test_detects_read_only_database_violation():
 
 def test_supports_pure_error_driven_inference_mode():
     """Asserts that projects can onboard with zero external spec URL (pure error inference)."""
-    manifest = AegisContractManifest(
-        project=ProjectMetadataConfig(service_name="pure-error-app", repository="org/pure-error-app"),
-        upstream_apis=[
-            UpstreamAPIContractConfig(
-                name="third_party_opaque_api",
-                spec_url=None,
-                client_repo_root="scenarios/vector_b_contract/client_repo",
-                code_root="src",
-                test_target="tests"
-            )
-        ]
-    )
-    report = AegisConfigLoader.validate_project_compliance(manifest, base_dir=".")
-    assert report["passed"] is True
-    check_item = next(c for c in report["checks"] if "Upstream Contract Discovery" in c["name"])
-    assert "Pure Error-Driven Schema Inference" in check_item["detail"]
+    with tempfile.TemporaryDirectory() as tmp_repo:
+        os.makedirs(os.path.join(tmp_repo, "src"), exist_ok=True)
+        os.makedirs(os.path.join(tmp_repo, "tests"), exist_ok=True)
+        with open(os.path.join(tmp_repo, "src", "client.py"), "w", encoding="utf-8") as f:
+            f.write("def charge(): pass\n")
+
+        manifest = AegisContractManifest(
+            project=ProjectMetadataConfig(service_name="pure-error-app", repository="org/pure-error-app"),
+            upstream_apis=[
+                UpstreamAPIContractConfig(
+                    name="third_party_opaque_api",
+                    spec_url=None,
+                    client_repo_root=".",
+                    code_root="src",
+                    test_target="tests"
+                )
+            ]
+        )
+        report = AegisConfigLoader.validate_project_compliance(manifest, base_dir=tmp_repo)
+        assert report["passed"] is True
+        check_item = next(c for c in report["checks"] if "Upstream Contract Discovery" in c["name"])
+        assert "Pure Error-Driven Schema Inference" in check_item["detail"]
 
 
 def test_detects_test_file_isolation_violation():
     """Asserts that marking a test file as an editable client module is flagged as a violation."""
-    manifest = AegisContractManifest(
-        project=ProjectMetadataConfig(service_name="bad-client-app", repository="org/bad-client-app"),
-        upstream_apis=[
-            UpstreamAPIContractConfig(
-                name="broken_gateway",
-                spec_url="scenarios/vector_b_contract/upstream/openapi_v2_breaking.json",
-                client_repo_root="scenarios/vector_b_contract/client_repo",
-                isolated_client_modules=["tests/test_payment_client.py"],
-                test_target="tests"
-            )
-        ]
-    )
-    report = AegisConfigLoader.validate_project_compliance(manifest, base_dir=".")
-    assert report["passed"] is False
-    assert any("Architectural violation" in err for err in report["errors"])
+    with tempfile.TemporaryDirectory() as tmp_repo:
+        os.makedirs(os.path.join(tmp_repo, "src"), exist_ok=True)
+        os.makedirs(os.path.join(tmp_repo, "tests"), exist_ok=True)
+        os.makedirs(os.path.join(tmp_repo, "contracts"), exist_ok=True)
+
+        spec_path = os.path.join(tmp_repo, "contracts", "openapi_v2.json")
+        with open(spec_path, "w", encoding="utf-8") as sf:
+            json.dump({"openapi": "3.0.3", "info": {"title": "Payment API", "version": "2.0.0"}, "paths": {}}, sf)
+
+        with open(os.path.join(tmp_repo, "tests", "test_payment_client.py"), "w", encoding="utf-8") as tf:
+            tf.write("def test_payment(): assert True\n")
+
+        manifest = AegisContractManifest(
+            project=ProjectMetadataConfig(service_name="bad-client-app", repository="org/bad-client-app"),
+            upstream_apis=[
+                UpstreamAPIContractConfig(
+                    name="broken_gateway",
+                    spec_url="contracts/openapi_v2.json",
+                    client_repo_root=".",
+                    code_root="src",
+                    isolated_client_modules=["tests/test_payment_client.py"],
+                    test_target="tests"
+                )
+            ]
+        )
+        report = AegisConfigLoader.validate_project_compliance(manifest, base_dir=tmp_repo)
+        assert report["passed"] is False
+        assert any("Architectural violation" in err for err in report["errors"])
 
 
 def test_starter_template_roundtrip():

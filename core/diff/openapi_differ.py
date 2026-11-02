@@ -1,18 +1,61 @@
 """
-Generalized OpenAPI 3.x Deterministic Differ Engine.
+Generalized OpenAPI 3.x Deterministic Differ & Live Spec Loader Engine.
 Performs recursive JSON Schema tree comparison across arbitrary OpenAPI specifications.
-Zero domain-specific hardcoding: detects path mutations, method changes, property removals,
-type mutations, constraint changes, and structural hierarchy migrations.
+Supports:
+1. Two-Spec Structural AST Diff (baseline_spec vs spec_url — local JSON/YAML or live HTTP/HTTPS URL).
+2. Single-Spec Target Contract Extraction (live spec_url without requiring a cached v1 spec).
+3. Zero-Spec Pure Error-Driven Inference (when upstream API provides no OpenAPI document).
+Zero domain-specific hardcoding.
 """
 
 from typing import Dict, Any, List, Optional
 import json
+import os
+import httpx
+import yaml
+
+
+def _dereference_spec(raw_spec: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolves internal JSON Schema `$ref` pointers cleanly via jsonref."""
+    try:
+        import jsonref
+        return jsonref.replace_refs(raw_spec, proxies=False)
+    except Exception:
+        return raw_spec
+
+
+def load_openapi_spec(source: str) -> Dict[str, Any]:
+    """Loads an OpenAPI 3.x / Swagger specification from a live HTTP(S) URL or local JSON/YAML file."""
+    if source.startswith(("http://", "https://")):
+        with httpx.Client(timeout=15.0, follow_redirects=True) as client:
+            resp = client.get(source)
+            resp.raise_for_status()
+            text = resp.text
+            try:
+                raw = resp.json()
+            except Exception:
+                raw = yaml.safe_load(text)
+        return _dereference_spec(raw or {})
+
+    if not os.path.exists(source):
+        raise FileNotFoundError(f"OpenAPI specification file not found: {source}")
+
+    with open(source, "r", encoding="utf-8") as f:
+        text = f.read()
+        if source.lower().endswith((".yaml", ".yml")):
+            raw = yaml.safe_load(text)
+        else:
+            try:
+                raw = json.loads(text)
+            except Exception:
+                raw = yaml.safe_load(text)
+    return _dereference_spec(raw or {})
 
 
 class GeneralizedOpenAPIDiffer:
     def __init__(self, v1_spec: Dict[str, Any], v2_spec: Dict[str, Any]):
-        self.v1 = v1_spec
-        self.v2 = v2_spec
+        self.v1 = _dereference_spec(v1_spec)
+        self.v2 = _dereference_spec(v2_spec)
 
     def compute_breaking_changes(self) -> List[Dict[str, Any]]:
         """Compares two arbitrary OpenAPI specs and outputs all breaking contract changes."""
@@ -27,6 +70,7 @@ class GeneralizedOpenAPIDiffer:
                 changes.append({
                     "change_class": "BREAKING",
                     "type": "ENDPOINT_REMOVED",
+                    "endpoint": path,
                     "path": path,
                     "description": f"Endpoint '{path}' was removed in newer specification."
                 })
@@ -36,10 +80,13 @@ class GeneralizedOpenAPIDiffer:
 
             # 2. HTTP Method comparisons
             for method, v1_operation in v1_methods.items():
+                if not isinstance(v1_operation, dict):
+                    continue
                 if method.lower() not in [m.lower() for m in v2_methods.keys()]:
                     changes.append({
                         "change_class": "BREAKING",
                         "type": "METHOD_REMOVED",
+                        "endpoint": path,
                         "path": path,
                         "method": method.upper(),
                         "description": f"HTTP method '{method.upper()}' removed from endpoint '{path}'."
@@ -49,6 +96,8 @@ class GeneralizedOpenAPIDiffer:
                 # Find matching v2 operation case-insensitively
                 v2_op_key = next(k for k in v2_methods.keys() if k.lower() == method.lower())
                 v2_operation = v2_methods[v2_op_key]
+                if not isinstance(v2_operation, dict):
+                    continue
 
                 # Diff Request Body
                 req_changes = self._diff_request_body(path, method.upper(), v1_operation, v2_operation)
@@ -59,6 +108,38 @@ class GeneralizedOpenAPIDiffer:
                 changes.extend(res_changes)
 
         return changes
+
+    def extract_target_contract_summary(self) -> List[Dict[str, Any]]:
+        """
+        Extracts active endpoint schemas from `v2_spec` when no baseline `v1_spec` is provided
+        (Single-Spec Live Discovery Mode).
+        """
+        contracts: List[Dict[str, Any]] = []
+        v2_paths = self.v2.get("paths", {})
+        for path, methods in v2_paths.items():
+            if not isinstance(methods, dict):
+                continue
+            for method, operation in methods.items():
+                if method.lower() not in {"get", "post", "put", "patch", "delete"} or not isinstance(operation, dict):
+                    continue
+                req_schema = self._extract_json_schema(operation.get("requestBody", {}))
+                if req_schema:
+                    leaf_paths = self._collect_required_leaf_paths(req_schema, "")
+                    clean_leaves = [lp.lstrip(".") for lp in leaf_paths if lp.lstrip(".")]
+                    contracts.append({
+                        "change_class": "TARGET_SCHEMA",
+                        "type": "ACTIVE_UPSTREAM_CONTRACT",
+                        "endpoint": path,
+                        "method": method.upper(),
+                        "required_fields": req_schema.get("required", []),
+                        "required_leaf_paths": clean_leaves,
+                        "request_schema": req_schema,
+                        "description": (
+                            f"Active upstream contract for {method.upper()} {path} requires fields: "
+                            f"{clean_leaves or list(req_schema.get('properties', {}).keys())}"
+                        )
+                    })
+        return contracts
 
     def _diff_request_body(
         self, path: str, method: str, v1_op: Dict[str, Any], v2_op: Dict[str, Any]
@@ -226,14 +307,15 @@ class GeneralizedOpenAPIDiffer:
     def _collect_required_leaf_paths(self, schema_node: Dict[str, Any], prefix: str) -> List[str]:
         """Recursively collects all required leaf property paths under a schema node."""
         if schema_node.get("type") != "object":
-            return [prefix]
+            return [prefix] if prefix else []
         props = schema_node.get("properties", {})
         reqs = schema_node.get("required", list(props.keys()))
         leaves = []
         for r in reqs:
             child_node = props.get(r, {})
-            leaves.extend(self._collect_required_leaf_paths(child_node, f"{prefix}.{r}"))
-        return leaves or [prefix]
+            next_prefix = f"{prefix}.{r}" if prefix else r
+            leaves.extend(self._collect_required_leaf_paths(child_node, next_prefix))
+        return leaves or ([prefix] if prefix else [])
 
     def _search_field_in_nested_objects(
         self, target_name: str, parent_props: Dict[str, Any], current_path: str = ""
@@ -274,30 +356,58 @@ class GeneralizedOpenAPIDiffer:
     def _extract_json_schema(self, content_container: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         content = content_container.get("content", {})
         for content_type, details in content.items():
-            if "json" in content_type.lower():
+            if "json" in content_type.lower() and isinstance(details, dict):
                 return details.get("schema")
         return None
 
 
-def diff_specs_from_files(v1_path: str, v2_path: str) -> Dict[str, Any]:
-    with open(v1_path, "r", encoding="utf-8") as f1, open(v2_path, "r", encoding="utf-8") as f2:
-        try:
-            import jsonref
-            v1 = jsonref.load(f1, proxies=False)
-            v2 = jsonref.load(f2, proxies=False)
-        except Exception:
-            f1.seek(0)
-            f2.seek(0)
-            v1 = json.load(f1)
-            v2 = json.load(f2)
+def diff_specs(v1_source: Optional[str] = None, v2_source: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Universal contract discovery entrypoint:
+    - If both v1_source and v2_source exist -> computes exact structural AST diff (TWO_SPEC_DIFF).
+    - If only v2_source exists -> extracts active target schemas from live URL/file (SINGLE_TARGET_SPEC).
+    - If neither exists -> returns clean Pure Error-Driven Inference context (PURE_ERROR_INFERENCE).
+    """
+    if v1_source and v2_source:
+        v1 = load_openapi_spec(v1_source)
+        v2 = load_openapi_spec(v2_source)
+        differ = GeneralizedOpenAPIDiffer(v1, v2)
+        changes = differ.compute_breaking_changes()
+        return {
+            "mode": "TWO_SPEC_DIFF",
+            "v1_title": v1.get("info", {}).get("title", "Baseline Spec"),
+            "v1_version": v1.get("info", {}).get("version", "v1"),
+            "v2_title": v2.get("info", {}).get("title", "Target Spec"),
+            "v2_version": v2.get("info", {}).get("version", "v2"),
+            "breaking_changes_count": len(changes),
+            "breaking_changes": changes
+        }
 
-    differ = GeneralizedOpenAPIDiffer(v1, v2)
-    changes = differ.compute_breaking_changes()
+    if v2_source:
+        v2 = load_openapi_spec(v2_source)
+        differ = GeneralizedOpenAPIDiffer({}, v2)
+        contracts = differ.extract_target_contract_summary()
+        return {
+            "mode": "SINGLE_TARGET_SPEC",
+            "v1_title": None,
+            "v1_version": None,
+            "v2_title": v2.get("info", {}).get("title", "Upstream OpenAPI"),
+            "v2_version": v2.get("info", {}).get("version", "latest"),
+            "breaking_changes_count": len(contracts),
+            "breaking_changes": contracts
+        }
+
     return {
-        "v1_title": v1.get("info", {}).get("title"),
-        "v1_version": v1.get("info", {}).get("version"),
-        "v2_title": v2.get("info", {}).get("title"),
-        "v2_version": v2.get("info", {}).get("version"),
-        "breaking_changes_count": len(changes),
-        "breaking_changes": changes
+        "mode": "PURE_ERROR_INFERENCE",
+        "v1_title": None,
+        "v1_version": None,
+        "v2_title": None,
+        "v2_version": None,
+        "breaking_changes_count": 0,
+        "breaking_changes": []
     }
+
+
+def diff_specs_from_files(v1_path: str, v2_path: str) -> Dict[str, Any]:
+    """Backward-compatible wrapper around `diff_specs`."""
+    return diff_specs(v1_path, v2_path)

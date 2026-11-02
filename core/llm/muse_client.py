@@ -7,6 +7,7 @@ Provides structured prompt orchestration for:
 
 from typing import Dict, Any, List, Optional
 import os
+import sys
 import json
 import re
 import time
@@ -14,7 +15,17 @@ import httpx
 from dotenv import load_dotenv
 from core.telemetry.cost_tracker import CostTracker
 
-load_dotenv()
+if sys.stdout.encoding != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
+_root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+if os.path.exists(_root_env):
+    load_dotenv(dotenv_path=_root_env, override=True)
+else:
+    load_dotenv(override=True)
 
 
 class MuseSparkClient:
@@ -24,9 +35,14 @@ class MuseSparkClient:
         base_url: Optional[str] = None,
         model_name: Optional[str] = None
     ):
-        self.api_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY")
-        self.base_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
-        self.model_name = model_name or os.getenv("META_MODEL_NAME") or "muse-spark-1.2"
+        if os.path.exists(_root_env):
+            load_dotenv(dotenv_path=_root_env, override=True)
+        raw_key = api_key or os.getenv("META_API_KEY") or os.getenv("BASETEN_API_KEY") or ""
+        self.api_key = raw_key.strip().strip('"').strip("'")
+        raw_url = base_url or os.getenv("META_MODEL_API_URL") or "https://api.meta.ai/v1"
+        self.base_url = raw_url.strip().strip('"').strip("'").rstrip("/")
+        raw_model = model_name or os.getenv("META_MODEL_NAME") or "muse-spark-1.2"
+        self.model_name = raw_model.strip().strip('"').strip("'")
         self.cost_tracker = CostTracker(model_name=self.model_name)
 
     def synthesize_contract_refactor(
@@ -42,25 +58,26 @@ class MuseSparkClient:
         """
         system_prompt = (
             "You are Aegis SRE's Code Synthesis Core powered by Meta Muse Spark. "
-            "An upstream API change has caused runtime errors in a downstream service. "
+            "An upstream API change or contract mismatch has caused runtime errors in a downstream service. "
             "You are given:\n"
-            "1. The runtime error log / HTTP failure payload that triggered this incident.\n"
-            "2. The structural diff between the previous and new upstream API specifications.\n"
-            "3. The downstream source files that interact with this API.\n"
+            "1. The runtime error log / HTTP failure payload / stack trace that triggered this incident.\n"
+            "2. Upstream contract context: a structural diff between baseline & new specs, the active upstream OpenAPI schema "
+            "(ACTIVE_UPSTREAM_CONTRACT), or empty if operating in Pure Error-Driven Inference mode.\n"
+            "3. The downstream editable source files and read-only test context.\n"
             "4. (Optional) Test failure logs from a previous sandbox verification attempt.\n\n"
-            "Your task is to refactor the downstream source files so they conform to the new upstream API contract "
-            "while preserving backward compatibility for internal callers.\n\n"
+            "Your task is to refactor the downstream editable source files so they conform to the required upstream API contract "
+            "and resolve the runtime error while preserving backward compatibility for internal callers.\n\n"
             "You must output STRICT JSON matching this schema:\n"
             "{\n"
-            '  "diagnosis": "concise technical root-cause analysis connecting the runtime error to the schema diff",\n'
+            '  "diagnosis": "concise technical root-cause analysis connecting the runtime error to the contract mismatch",\n'
             '  "refactored_files": {\n'
             '     "relative/path/to/file.py": "complete refactored file source code"\n'
             "  }\n"
             "}\n"
             "Rules:\n"
-            "1. Output ONLY valid JSON.\n"
-            "2. Reconcile any renamed fields, type conversions, or newly nested object hierarchies shown in the diff.\n"
-            "3. Do NOT modify test assertions in test files unless the test itself is invalid; prefer fixing the client and model implementation so existing caller patterns continue to work seamlessly.\n"
+            "1. Output ONLY valid JSON. Include the FULL file contents for every modified file in refactored_files.\n"
+            "2. Reconcile any renamed fields, unit/type conversions, or newly nested object hierarchies indicated by the spec or HTTP 400/422 validation errors.\n"
+            "3. NEVER include test files in refactored_files and NEVER weaken test assertions; fix the client/model/service implementation.\n"
             "4. If previous_sandbox_test_failure is provided, fix the exact error shown in the traceback."
         )
 
@@ -89,19 +106,26 @@ class MuseSparkClient:
                 res["cost_metrics"] = self.cost_tracker.get_task_summary()
                 return res
             except Exception as e:
-                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local AST synthesizer.")
+                raise RuntimeError(
+                    f"Meta Model API call failed ({e}). Live Meta Muse Spark reasoning is required for contract remediation. "
+                    "Please verify that META_API_KEY and META_MODEL_API_URL in .env are valid and authorized."
+                ) from e
 
-        res = self._generic_ast_contract_synthesizer(
-            incident_error_log, breaking_changes, editable_files, previous_errors
+        if self.api_key == "MOCK":
+            res = self._generic_ast_contract_synthesizer(
+                incident_error_log, breaking_changes, editable_files, previous_errors
+            )
+            prompt_str = system_prompt + json.dumps(user_prompt)
+            res_str = json.dumps(res)
+            p_tokens = self.cost_tracker.estimate_tokens_from_text(prompt_str)
+            c_tokens = self.cost_tracker.estimate_tokens_from_text(res_str)
+            self.cost_tracker.record_usage(p_tokens, c_tokens, task_name="synthesize_contract_refactor")
+            res["cost_metrics"] = self.cost_tracker.get_task_summary()
+            return res
+
+        raise RuntimeError(
+            "META_API_KEY is not configured in .env. Live Meta Muse Spark reasoning is required for autonomous remediation."
         )
-        # Estimate usage for offline accounting
-        prompt_str = system_prompt + json.dumps(user_prompt)
-        res_str = json.dumps(res)
-        p_tokens = self.cost_tracker.estimate_tokens_from_text(prompt_str)
-        c_tokens = self.cost_tracker.estimate_tokens_from_text(res_str)
-        self.cost_tracker.record_usage(p_tokens, c_tokens, task_name="synthesize_contract_refactor")
-        res["cost_metrics"] = self.cost_tracker.get_task_summary()
-        return res
 
     def _call_live_api(self, system_prompt: str, user_prompt: str, task_name: str = "llm_call") -> Dict[str, Any]:
         """Invokes the Meta Model API chat completion endpoint and records token usage."""
@@ -119,9 +143,9 @@ class MuseSparkClient:
             "response_format": {"type": "json_object"}
         }
 
-        print(f"   🧠 [Meta Model API] Dispatching live prompt to '{self.model_name}' at {self.base_url}...")
+        print(f"   🧠 [Meta Model API] Dispatching live prompt to '{self.model_name}' at {self.base_url} (generating patch)...", flush=True)
         start_t = time.perf_counter()
-        with httpx.Client(timeout=60.0) as client:
+        with httpx.Client(timeout=90.0) as client:
             resp = client.post(f"{self.base_url}/chat/completions", headers=headers, json=payload)
             resp.raise_for_status()
             elapsed = round(time.perf_counter() - start_t, 2)
@@ -131,7 +155,7 @@ class MuseSparkClient:
             p_tokens = usage.get("prompt_tokens", self.cost_tracker.estimate_tokens_from_text(system_prompt + user_prompt))
             c_tokens = usage.get("completion_tokens", self.cost_tracker.estimate_tokens_from_text(content))
             self.cost_tracker.record_usage(p_tokens, c_tokens, task_name=task_name)
-            print(f"   🧠 [Meta Model API] Response received in {elapsed}s | Tokens: {p_tokens} prompt + {c_tokens} completion")
+            print(f"   🧠 [Meta Model API] Response received in {elapsed}s | Tokens: {p_tokens} prompt + {c_tokens} completion", flush=True)
 
             if content.startswith("```"):
                 lines = content.strip().split("\n")
@@ -283,10 +307,18 @@ def _aegis_reconcile_contract_payload(raw_payload: dict) -> dict:
             try:
                 return self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2))
             except Exception as e:
-                print(f"[Aegis LLM Warning] Live API call failed ({e}). Using local report generator.")
+                raise RuntimeError(
+                    f"Meta Model API call failed ({e}). Live Meta Muse Spark reasoning is required for post-mortem synthesis. "
+                    "Please verify that META_API_KEY and META_MODEL_API_URL in .env are valid and authorized."
+                ) from e
 
-        return self._fallback_artifact_synthesis(
-            incident_id, vector_type, incident_trigger, diagnosis, changes_or_plan, unified_diff_or_ddl, sandbox_result
+        if self.api_key == "MOCK":
+            return self._fallback_artifact_synthesis(
+                incident_id, vector_type, incident_trigger, diagnosis, changes_or_plan, unified_diff_or_ddl, sandbox_result
+            )
+
+        raise RuntimeError(
+            "META_API_KEY is not configured in .env. Live Meta Muse Spark reasoning is required for autonomous remediation."
         )
 
     def _fallback_artifact_synthesis(

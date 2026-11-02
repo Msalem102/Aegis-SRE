@@ -1,21 +1,32 @@
 """
 Aegis SRE - Vector B Orchestration Runner (Error-Activated, Self-Healing, 100% Generic).
 Workflow:
-1. Outage Activation: Downstream service suffers runtime API failure (HTTP 4xx/5xx error & stack trace),
-   which triggers and activates the Aegis SRE agent.
-2. Contract Diffing: Agent inspects upstream API specification changes and computes a structural AST diff.
-3. Dependency Mapping: Agent scans the downstream repository to isolate impacted models and callers.
+1. Outage Activation: Downstream service suffers runtime API failure (inbound alert webhook / HTTP 4xx event
+   or failing verification suite), activating the Aegis SRE agent.
+2. Contract Discovery: Supports 3 modes seamlessly:
+   - Two-Spec Structural AST Diff (`baseline_spec` vs `spec_url`)
+   - Single-Spec Live Target Discovery (`spec_url` HTTP URL or file without requiring `baseline_spec`)
+   - Pure Error-Driven Schema Inference (zero external spec required)
+3. Dependency Mapping: Scans `code_root` + runtime tracebacks + AST imports to isolate impacted callers & models.
 4. Self-Healing Sandbox Loop (Max 3 Attempts):
-   - Meta Muse Spark synthesizes code refactors from the error log + schema diff + source files.
-   - Ephemeral Sandbox (Modal Cloud / isolated container) runs the integration test suite.
+   - Meta Muse Spark synthesizes code refactors from error log + contract context + source files.
+   - Ephemeral Sandbox (Modal Cloud micro-VM with dynamic `requirements.txt` installation) runs pytest.
    - If tests fail, traceback is fed back into Meta Muse Spark to self-correct.
-5. Delivery: Meta Muse Spark authors the full Incident Post-Mortem report and opens a ready-to-merge GitHub PR.
+5. Delivery: Meta Muse Spark authors the full Incident Post-Mortem report and opens an atomic GitHub PR.
 """
 
 import sys
 import os
-import json
+import uuid
+from datetime import datetime, timezone
 from typing import Dict, Any, Optional
+from dotenv import load_dotenv
+
+_runner_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
+if os.path.exists(_runner_env):
+    load_dotenv(dotenv_path=_runner_env, override=True)
+else:
+    load_dotenv(override=True)
 
 if sys.stdout.encoding != "utf-8":
     try:
@@ -24,11 +35,10 @@ if sys.stdout.encoding != "utf-8":
         pass
 
 from core.config.aegis_config import AegisConfigLoader
-from core.diff.openapi_differ import diff_specs_from_files
+from core.diff.openapi_differ import diff_specs
 from core.analysis.dependency_mapper import DependencyMapper
 from core.llm.muse_client import MuseSparkClient
-from core.sandbox.modal_sandbox import EphemeralSandbox
-from core.sandbox.test_runner import apply_verified_patch_to_repo
+from core.sandbox.modal_sandbox import EphemeralSandbox, apply_verified_patch_to_repo
 from core.delivery.github_delivery import GitHubDeliveryEngine
 
 
@@ -38,44 +48,91 @@ def run_vector_b_remediation(
     client_repo_path: Optional[str] = None,
     test_target: Optional[str] = None,
     max_retries: Optional[int] = None,
-    config_path: str = "aegis.yaml"
+    config_path: str = "aegis.yaml",
+    runtime_error_override: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     print("=" * 78)
     print("🚨 AEGIS SRE: Autonomous API Contract Drift Remediation (Vector B)")
     print("=" * 78)
 
+    config_dir = (
+        os.path.dirname(os.path.abspath(config_path))
+        if config_path and os.path.exists(config_path)
+        else os.getcwd()
+    )
     manifest = AegisConfigLoader.load_or_default(config_path)
+    resolved_code_dir = (
+        AegisConfigLoader.resolve_path(config_dir, manifest.project.code_dir)
+        if manifest.project.code_dir
+        else None
+    )
+    base_dir = resolved_code_dir if (resolved_code_dir and os.path.isdir(resolved_code_dir)) else config_dir
     api_cfg = manifest.upstream_apis[0] if manifest.upstream_apis else None
-    v1_spec_path = v1_spec_path or (api_cfg.baseline_spec if api_cfg else "scenarios/vector_b_contract/upstream/openapi_v1.json")
-    v2_spec_path = v2_spec_path or (api_cfg.target_spec if api_cfg else "scenarios/vector_b_contract/upstream/openapi_v2_breaking.json")
-    client_repo_path = client_repo_path or (api_cfg.client_repo_root if api_cfg else "scenarios/vector_b_contract/client_repo")
+
+    if not api_cfg and not client_repo_path and not v2_spec_path:
+        raise RuntimeError(
+            f"No 'upstream_apis' entries configured in '{config_path}'. "
+            "Add an upstream API contract configuration to run Vector B remediation."
+        )
+
+    raw_v1 = v1_spec_path if v1_spec_path is not None else (api_cfg.baseline_spec if api_cfg else None)
+    raw_v2 = v2_spec_path if v2_spec_path is not None else (api_cfg.get_effective_spec() if api_cfg else None)
+    raw_repo = client_repo_path or (api_cfg.client_repo_root if api_cfg else ".")
+
+    resolved_v1 = AegisConfigLoader.resolve_path(base_dir, raw_v1)
+    resolved_v2 = AegisConfigLoader.resolve_path(base_dir, raw_v2)
+    resolved_repo = AegisConfigLoader.resolve_path(base_dir, raw_repo) or base_dir
     test_target = test_target or (api_cfg.test_target if api_cfg else "tests")
+    code_root = api_cfg.code_root if api_cfg else None
+    isolated_modules = api_cfg.isolated_client_modules if api_cfg else None
     max_retries = max_retries or (api_cfg.max_healing_retries if api_cfg else 3)
 
     print(f"[Contract Manifest] Loaded '{config_path}' for service '{manifest.project.service_name}'")
 
-    interpreter_path = sys.executable
-    sandbox = EphemeralSandbox(client_repo_path, python_interpreter=interpreter_path)
+    sandbox = EphemeralSandbox(
+        resolved_repo,
+        python_interpreter=sys.executable,
+        app_name=manifest.sandbox.app_name,
+        timeout_seconds=manifest.sandbox.timeout_seconds,
+        provider=manifest.sandbox.provider.lower()
+    )
 
     # -------------------------------------------------------------
     # Step 1: Outage Detection & Error-Driven Agent Activation
     # -------------------------------------------------------------
-    print("\n[Step 1] Live Outage Detected -> Capturing Runtime Error & Activating Agent...")
+    print("\n[Step 1] Live Outage Detection -> Capturing Runtime Error & Activating Agent...")
+
+    alert_context: Optional[Dict[str, Any]] = runtime_error_override
+    if alert_context:
+        print(f" -> Ingested Inbound Alert Webhook Telemetry [{alert_context.get('incident_id')}]")
+
     baseline_run = sandbox.execute_test_suite({}, test_path=test_target)
-    if baseline_run["passed"]:
-        print(" ⚠️ No active contract outage detected (all tests currently passing).")
+    if baseline_run["passed"] and not alert_context:
+        print(" ⚠️ No active contract outage detected (all verification tests currently passing).")
         return {"status": "NO_OUTAGE_DETECTED"}
 
+    combined_output = baseline_run["stdout"] + "\n" + baseline_run["stderr"]
     error_lines = [
-        line.strip() for line in (baseline_run["stdout"] + "\n" + baseline_run["stderr"]).splitlines()
-        if any(tok in line for tok in ["ValueError", "AssertionError", "422", "400", "Error", "FAILED"])
+        line.strip() for line in combined_output.splitlines()
+        if any(tok in line for tok in ["ValueError", "AssertionError", "ValidationError", "KeyError", "422", "400", "Error", "FAILED"])
     ]
+
+    utc_today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    default_inc_id = f"INC-{utc_today}-API-{uuid.uuid4().hex[:4].upper()}"
+
     incident_error_log = {
-        "incident_id": "INC-20261028-API-01",
-        "service": os.path.basename(os.path.abspath(client_repo_path)),
-        "http_status": 422,
-        "error_message": " | ".join(error_lines[:3]) if error_lines else "Upstream API contract validation failure",
-        "raw_traceback": baseline_run["stdout"][-1200:]
+        "incident_id": (alert_context or {}).get("incident_id") or default_inc_id,
+        "service": manifest.project.service_name or os.path.basename(os.path.abspath(resolved_repo)),
+        "http_status": (alert_context or {}).get("http_status", 422),
+        "endpoint": (alert_context or {}).get("endpoint", ""),
+        "error_message": (
+            (alert_context or {}).get("error_message")
+            or (" | ".join(error_lines[:4]) if error_lines else "Upstream API contract validation failure")
+        ),
+        "raw_traceback": (
+            combined_output[-1500:]
+            + ("\n" + str(alert_context.get("raw_traceback", "")) if alert_context else "")
+        ).strip()
     }
     print(f" ❌ Outage Triggered [{incident_error_log['incident_id']}]:")
     print(f"    {incident_error_log['error_message']}")
@@ -84,22 +141,43 @@ def run_vector_b_remediation(
     # -------------------------------------------------------------
     # Step 2: Upstream OpenAPI Spec Inspection & Structural Diff
     # -------------------------------------------------------------
-    print("\n[Step 2] Inspecting Upstream API Specifications & Computing Structural Diff...")
-    diff_result = diff_specs_from_files(v1_spec_path, v2_spec_path)
+    print("\n[Step 2] Inspecting Upstream API Contract Context...")
+    try:
+        diff_result = diff_specs(resolved_v1, resolved_v2)
+    except Exception as spec_err:
+        print(f" ⚠️ Could not fetch OpenAPI spec ({spec_err}). Falling back to Pure Error-Driven Schema Inference.")
+        diff_result = {
+            "mode": "PURE_ERROR_INFERENCE",
+            "breaking_changes_count": 0,
+            "breaking_changes": []
+        }
+
     breaking_changes = diff_result["breaking_changes"]
-    print(f" -> Diffed '{diff_result['v1_title']}' ({diff_result['v1_version']} -> {diff_result['v2_version']})")
-    print(f" -> Isolated {len(breaking_changes)} structural contract changes:")
-    for change in breaking_changes:
-        print(f"    • [{change['type']}] {change.get('description', '')}")
+    discovery_mode = diff_result.get("mode", "TWO_SPEC_DIFF")
+    if discovery_mode == "TWO_SPEC_DIFF":
+        print(f" -> Mode: TWO_SPEC_DIFF | Diffed '{diff_result['v1_title']}' ({diff_result['v1_version']} -> {diff_result['v2_version']})")
+        print(f" -> Isolated {len(breaking_changes)} structural contract changes:")
+        for change in breaking_changes:
+            print(f"    • [{change['type']}] {change.get('description', '')}")
+    elif discovery_mode == "SINGLE_TARGET_SPEC":
+        print(f" -> Mode: SINGLE_TARGET_SPEC | Loaded live upstream contract '{diff_result['v2_title']}' ({diff_result['v2_version']})")
+        print(f" -> Extracted {len(breaking_changes)} active endpoint schema contract(s).")
+    else:
+        print(" -> Mode: PURE_ERROR_INFERENCE | Inferring upstream contract requirements directly from runtime 4xx payload & traceback.")
 
     # -------------------------------------------------------------
     # Step 3: Downstream Dependency Mapping
     # -------------------------------------------------------------
     print("\n[Step 3] Scanning Downstream Repository for Impacted Callers & Models...")
-    mapper = DependencyMapper(client_repo_path)
-    dep_result = mapper.map_affected_components(breaking_changes)
+    mapper = DependencyMapper(
+        resolved_repo,
+        code_root=code_root,
+        test_target=test_target,
+        isolated_client_modules=isolated_modules
+    )
+    dep_result = mapper.map_affected_components(breaking_changes, incident_error_log=incident_error_log)
     target_files = dep_result["target_files"]
-    print(f" -> Mapped {len(target_files)} impacted files: {list(target_files.keys())}")
+    print(f" -> Mapped {len(target_files)} context files: {list(target_files.keys())}")
 
     # -------------------------------------------------------------
     # Step 4: Closed-Loop Synthesis & Ephemeral Sandbox Verification (Max 3 Loops)
@@ -117,7 +195,15 @@ def run_vector_b_remediation(
             affected_files=target_files,
             previous_errors=last_sandbox_error
         )
-        refactored_files = synthesis.get("refactored_files", {})
+        raw_refactored = synthesis.get("refactored_files", {})
+        # Enforce test-file immutability & normalize POSIX paths
+        refactored_files = {
+            k.replace("\\", "/"): v
+            for k, v in raw_refactored.items()
+            if "test" not in os.path.basename(k.replace("\\", "/")).lower()
+        }
+        synthesis["refactored_files"] = refactored_files
+
         cost_info = synthesis.get("cost_metrics", {})
         print(f" -> Diagnosis: \"{synthesis.get('diagnosis', '')}\"")
         print(f" -> Synthesized candidate patch across {len(refactored_files)} file(s): {list(refactored_files.keys())}")
@@ -136,8 +222,9 @@ def run_vector_b_remediation(
             print(f" ❌ Sandbox Attempt {attempt} Failed (Exit Code {sandbox_result['exit_code']}). Feeding traceback back to Muse Spark...")
 
     if not verified_synthesis or not verified_sandbox_result:
-        print("\n🚨 Sandbox Mandate Enforced: Patch failed after maximum retries. Escalating to human on-call.")
-        sys.exit(1)
+        msg = "Sandbox Mandate Enforced: Patch failed after maximum retries. Escalating to human on-call."
+        print(f"\n🚨 {msg}")
+        raise RuntimeError(msg)
 
     # -------------------------------------------------------------
     # Step 5: Model-Authored Report & Ready-to-Merge GitHub PR
@@ -157,12 +244,39 @@ def run_vector_b_remediation(
         sandbox_result=verified_sandbox_result
     )
 
-    post_mortem_file = f"POST_MORTEM_{incident_id.replace('-', '_')}.md"
+    # Respect read_only_source to guarantee external client repos are never modified
+    is_read_only_src = getattr(manifest.project, "read_only_source", False)
+    output_base_dir = (
+        os.path.join(os.getcwd(), "artifacts", manifest.project.service_name)
+        if is_read_only_src
+        else base_dir
+    )
+
+    reports_dir = os.path.join(output_base_dir, "reports")
+    os.makedirs(reports_dir, exist_ok=True)
+    post_mortem_file = os.path.join(reports_dir, f"POST_MORTEM_{incident_id.replace('-', '_')}.md")
     with open(post_mortem_file, "w", encoding="utf-8") as f:
         f.write(artifacts["post_mortem_markdown"])
     print(f" -> Saved Incident Post-Mortem Report: {post_mortem_file}")
 
-    target_repo = os.getenv("GITHUB_REPOSITORY") or manifest.project.repository
+    if is_read_only_src:
+        patches_dir = os.path.join(output_base_dir, "patches", incident_id.replace("-", "_"))
+        apply_verified_patch_to_repo(patches_dir, verified_synthesis["refactored_files"])
+        print(f" -> Saved Verified Refactored Artifacts (read-only target safe): {patches_dir}")
+
+    # Compute Git repository root-relative POSIX file paths for atomic GitHub PR commit
+    files_to_commit: Dict[str, str] = {}
+    for rel_p, content in verified_synthesis["refactored_files"].items():
+        abs_p = os.path.normpath(os.path.join(resolved_repo, rel_p))
+        try:
+            repo_rel = os.path.relpath(abs_p, base_dir).replace(os.sep, "/")
+            if repo_rel.startswith(".."):
+                repo_rel = rel_p.replace("\\", "/")
+        except ValueError:
+            repo_rel = rel_p.replace("\\", "/")
+        files_to_commit[repo_rel] = content
+
+    target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
     base_branch = manifest.project.default_branch
 
     pr = delivery.deliver_remediation_pr(
@@ -170,7 +284,7 @@ def run_vector_b_remediation(
         incident_id=incident_id,
         pr_title=artifacts["pr_title"],
         pr_body=artifacts["post_mortem_markdown"],
-        files_to_commit=verified_synthesis["refactored_files"],
+        files_to_commit=files_to_commit,
         base_branch=base_branch
     )
 
@@ -185,8 +299,8 @@ def run_vector_b_remediation(
         print(f"    Target Repository: {pr['target_repo']}")
         print(f"    PR URL:            {pr['html_url']}")
 
-    if "--apply" in sys.argv:
-        apply_verified_patch_to_repo(client_repo_path, verified_synthesis["refactored_files"])
+    if "--apply" in sys.argv and not is_read_only_src:
+        apply_verified_patch_to_repo(resolved_repo, verified_synthesis["refactored_files"])
         print(" -> Applied verified patch to repository.")
 
     print("\n🎉 Vector B Autonomous Remediation Complete!")
@@ -195,6 +309,7 @@ def run_vector_b_remediation(
     return {
         "incident_id": incident_id,
         "trigger": incident_error_log,
+        "discovery_mode": discovery_mode,
         "breaking_changes": breaking_changes,
         "diagnosis": verified_synthesis["diagnosis"],
         "unified_diff": unified_diff,
@@ -205,4 +320,8 @@ def run_vector_b_remediation(
 
 
 if __name__ == "__main__":
-    run_vector_b_remediation()
+    try:
+        run_vector_b_remediation()
+    except Exception as exc:
+        print(f"❌ Vector B Execution Aborted: {exc}")
+        sys.exit(1)

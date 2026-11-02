@@ -7,42 +7,39 @@
 version: "1.0"
 
 project:
-  service_name: "novacart-ecommerce"
-  repository: "meta-sre/novacart-ecommerce"
+  service_name: "cupertino-coffee-store"
+  repository: "meta-sre/cupertino-coffee"
   default_branch: "main"
 
 # -----------------------------------------------------------------------------
+# Continuous Monitoring & Direct Watchdog
+# -----------------------------------------------------------------------------
+observability:
+  provider: "direct"
+  watchdog_interval_seconds: 60
+
+# -----------------------------------------------------------------------------
 # Vector A: Database Performance & Zero-Downtime Indexing Contract
-# Requirement: Unmanaged or managed PostgreSQL/SQLite with Read-Only inspection
+# Requirement: PostgreSQL with strictly Read-Only inspection access (mode=ro)
 # -----------------------------------------------------------------------------
 database:
   engine: "postgres"
   read_only_connection_env: "DATABASE_RO_URL"
   require_read_only_mode: true
-  schema_path: "scenarios/vector_a_db/schema.sql"
-  live_db_path: "scenarios/vector_a_db/live_production_sim.db"
-  telemetry_source: "scenarios/vector_a_db/incident_telemetry.json"
+  schema_path: "auto"
+  telemetry_source: "auto"
   migration_output_dir: "migrations"
   max_healing_retries: 3
   sla_thresholds:
-    p99_latency_ms: 1500.0
+    p99_latency_ms: 1000.0
     max_cpu_percent: 80.0
     min_sandbox_speedup_percent: 80.0
 
 # -----------------------------------------------------------------------------
 # Vector B: Upstream API Contract Drift Auto-Remediation
-# Requirement: Autonomous AST mapping across code_root (no manual file listing)
+# Add upstream API dependencies below (see mockstore_aegis.yaml / README.md):
 # -----------------------------------------------------------------------------
-upstream_apis:
-  - name: "stripe_payment_gateway"
-    # Live OpenAPI spec URL / path (or omitted to infer drift purely from 422 error logs):
-    spec_url: "scenarios/vector_b_contract/upstream/openapi_v2_breaking.json"
-    baseline_spec: "scenarios/vector_b_contract/upstream/openapi_v1.json"
-    client_repo_root: "scenarios/vector_b_contract/client_repo"
-    # Autonomous scanner targets this root (searches views, clients, models automatically):
-    code_root: "src"
-    test_target: "tests"
-    max_healing_retries: 3
+upstream_apis: []
 
 # -----------------------------------------------------------------------------
 # Ephemeral Sandbox Verification Gate (Modal Cloud Serverless Micro-VMs)
@@ -50,4 +47,4 @@ upstream_apis:
 sandbox:
   provider: "modal"
   app_name: "aegis-sre"
-  timeout_seconds: 60
+  timeout_seconds: 120
