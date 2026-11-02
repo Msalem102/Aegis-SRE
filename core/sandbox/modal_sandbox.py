@@ -31,9 +31,10 @@ except ImportError:
     MODAL_AVAILABLE = False
 
 
+import zlib
+
 MOUNTABLE_EXTENSIONS = (
-    ".py", ".json", ".toml", ".yaml", ".yml",
-    ".sql", ".txt", ".ini", ".cfg", ".csv", ".html", ".jinja", ".j2"
+    ".py", ".json", ".toml", ".yaml", ".yml", ".txt", ".ini", ".cfg"
 )
 IGNORED_SANDBOX_DIRS = {".git", ".venv", "venv", "env", "__pycache__", ".pytest_cache", "node_modules", ".mypy_cache"}
 
@@ -166,10 +167,12 @@ class EphemeralSandbox:
             mount_files[norm_p] = base64.b64encode(content.encode("utf-8")).decode("ascii")
 
         norm_test_path = test_path.replace("\\", "/").replace(os.sep, "/")
-        payload_b64 = base64.b64encode(json.dumps(mount_files).encode("utf-8")).decode("ascii")
+        compressed_payload = base64.b64encode(
+            zlib.compress(json.dumps(mount_files).encode("utf-8"), level=9)
+        ).decode("ascii")
         bootstrap_code = (
-            "import os, json, base64, subprocess, sys; "
-            f"files = json.loads(base64.b64decode('{payload_b64}').decode('utf-8')); "
+            "import os, json, base64, zlib, subprocess, sys; "
+            f"files = json.loads(zlib.decompress(base64.b64decode('{compressed_payload}')).decode('utf-8')); "
             "os.makedirs('/tmp/repo', exist_ok=True); "
             "[ (os.makedirs(os.path.dirname('/tmp/repo/' + k) or '/tmp/repo', exist_ok=True), open('/tmp/repo/' + k, 'wb').write(base64.b64decode(v))) for k, v in files.items() ]; "
             "env = os.environ.copy(); env['PYTHONPATH'] = '/tmp/repo'; "

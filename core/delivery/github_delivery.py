@@ -26,11 +26,17 @@ else:
     load_dotenv(override=True)
 
 
+_USE_ENV = object()
+
+
 class GitHubDeliveryEngine:
-    def __init__(self, github_token: Optional[str] = None, client: Optional[httpx.Client] = None):
-        if os.path.exists(_root_env):
-            load_dotenv(dotenv_path=_root_env, override=True)
-        raw_token = github_token or os.getenv("GITHUB_TOKEN") or ""
+    def __init__(self, github_token: Any = _USE_ENV, client: Optional[httpx.Client] = None):
+        if github_token is _USE_ENV:
+            if os.path.exists(_root_env):
+                load_dotenv(dotenv_path=_root_env, override=True)
+            raw_token = os.getenv("GITHUB_TOKEN") or ""
+        else:
+            raw_token = github_token or ""
         self.github_token = raw_token.strip().strip('"').strip("'") or None
         self._custom_client = client
 

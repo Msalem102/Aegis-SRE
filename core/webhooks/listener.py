@@ -138,11 +138,12 @@ def create_webhook_app(
                                     query_sig = discovered.get("pg_stat_statements_summary", {}).get("query", "")
                                     sig_uid = f"watchdog-{abs(hash(query_sig))}"
                                     if query_sig and sig_uid not in processed_uids:
-                                        print(f"⚡ [Aegis Direct DB Watchdog] Active unindexed sequential scan surge detected on '{manifest.project.service_name}' (+{current_reads - prev_reads} tuples read)!")
+                                        print(f"⚡ [Aegis Direct DB Watchdog] Active unindexed sequential scan surge detected on '{manifest.project.service_name}' (+{current_reads - prev_reads} tuples read)!", flush=True)
                                         await asyncio.to_thread(
                                             _dispatch_remediation,
                                             {"vector": "a", "event_uid": sig_uid, "payload": discovered}
                                         )
+                                        print(f"\n📡 [Aegis Direct DB Watchdog] Remediation cycle finished. Resuming active monitoring (polling every {interval}s)...\n", flush=True)
                             else:
                                 is_initial_poll = False
                     except Exception as err:
