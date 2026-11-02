@@ -117,11 +117,15 @@ def cmd_init(output_path: str, overwrite: bool = False) -> int:
     return 0
 
 
-def cmd_run(vector: str, config_path: str, query: Optional[str] = None) -> int:
+def cmd_run(vector: str, config_path: str, query: Optional[str] = None, skip_verify: bool = False) -> int:
     code = cmd_check(config_path)
     if code != 0:
         print("Aborting execution due to contract compliance failure.")
         return code
+
+    if not skip_verify:
+        from verify_apis import verify_all_apis
+        verify_all_apis(config_path=config_path)
 
     v = vector.lower()
     try:
@@ -147,11 +151,15 @@ def cmd_run(vector: str, config_path: str, query: Optional[str] = None) -> int:
     return 0
 
 
-def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchdog: bool = False) -> int:
+def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchdog: bool = False, skip_verify: bool = False) -> int:
     code = cmd_check(config_path)
     if code != 0:
         print("Aborting webhook daemon startup due to contract compliance failure.")
         return code
+
+    if not skip_verify:
+        from verify_apis import verify_all_apis
+        verify_all_apis(config_path=config_path)
 
     import uvicorn
     from core.webhooks.listener import create_webhook_app
@@ -166,6 +174,12 @@ def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchd
     app = create_webhook_app(config_path=config_path, enable_db_watchdog=watchdog)
     uvicorn.run(app, host=host, port=port)
     return 0
+
+
+def cmd_verify(config_path: str) -> int:
+    from verify_apis import verify_all_apis
+    results = verify_all_apis(config_path=config_path)
+    return 0 if results["all_passed"] else 1
 
 
 def cmd_deploy(config_path: str) -> int:
@@ -204,6 +218,7 @@ def main() -> int:
     p_run.add_argument("--vector", choices=["a", "b", "db", "api", "all"], default="all", help="Remediation vector to execute")
     p_run.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
     p_run.add_argument("--query", default=None, help="Optional offending SQL query to remediate on-demand")
+    p_run.add_argument("--skip-verify", action="store_true", help="Skip pre-flight API verification checks")
 
     # listen
     p_listen = subparsers.add_parser("listen", help="Start live Alert webhook & optional Direct DB Watchdog daemon")
@@ -211,6 +226,11 @@ def main() -> int:
     p_listen.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
     p_listen.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
     p_listen.add_argument("--watchdog", action="store_true", help="Actively monitor PostgreSQL read-only telemetry in background")
+    p_listen.add_argument("--skip-verify", action="store_true", help="Skip pre-flight API verification checks")
+
+    # verify
+    p_verify = subparsers.add_parser("verify", help="Verify live connectivity to Meta Model API, Modal Cloud, and GitHub")
+    p_verify.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
 
     # deploy
     p_deploy = subparsers.add_parser("deploy", help="Deploy zero-idle-cost scale-to-zero Aegis SRE daemon onto Modal Cloud")
@@ -223,9 +243,11 @@ def main() -> int:
     elif args.command == "init":
         return cmd_init(args.output, overwrite=args.force)
     elif args.command == "run":
-        return cmd_run(args.vector, args.config, query=args.query)
+        return cmd_run(args.vector, args.config, query=args.query, skip_verify=args.skip_verify)
     elif args.command == "listen":
-        return cmd_listen(args.config, host=args.host, port=args.port, watchdog=args.watchdog)
+        return cmd_listen(args.config, host=args.host, port=args.port, watchdog=args.watchdog, skip_verify=args.skip_verify)
+    elif args.command == "verify":
+        return cmd_verify(args.config)
     elif args.command == "deploy":
         return cmd_deploy(args.config)
     else:
