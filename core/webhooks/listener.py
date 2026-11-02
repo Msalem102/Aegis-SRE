@@ -211,6 +211,9 @@ def create_webhook_app(
                 "event_uid": classified["event_uid"]
             }
 
+        # Immediately mark UID to prevent race conditions from concurrent duplicate bursts
+        processed_uids.add(classified["event_uid"])
+
         if sync:
             result = await asyncio.to_thread(_dispatch_remediation, classified)
             return {"status": "COMPLETED", "remediation": result}

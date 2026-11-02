@@ -109,6 +109,32 @@ class GitHubDeliveryEngine:
                 repo_resp.raise_for_status()
                 default_branch = base_branch or repo_resp.json().get("default_branch", "main")
 
+                # Check if an existing open Pull Request already exists for this incident
+                prs_resp = client.get(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=15", headers=headers)
+                if prs_resp.status_code == 200:
+                    try:
+                        prs_data = prs_resp.json()
+                        if isinstance(prs_data, list):
+                            for opr in prs_data:
+                                if not isinstance(opr, dict):
+                                    continue
+                                head_ref = opr.get("head", {}).get("ref", "").lower()
+                                inc_clean = incident_id.lower().replace("_", "-")
+                                if inc_clean in head_ref:
+                                    return {
+                                        "status": "LIVE_GITHUB_PR_ALREADY_OPEN",
+                                        "pr_number": opr.get("number"),
+                                        "html_url": opr.get("html_url"),
+                                        "title": opr.get("title"),
+                                        "branch": opr.get("head", {}).get("ref"),
+                                        "base_branch": default_branch,
+                                        "target_repo": repo,
+                                        "committed_files": list(files_to_commit.keys()),
+                                        "message": f"Open Pull Request #{opr.get('number')} already exists for {incident_id}."
+                                    }
+                    except Exception:
+                        pass
+
                 # 2. Get latest commit SHA on base branch
                 ref_resp = client.get(
                     f"https://api.github.com/repos/{repo}/git/ref/heads/{default_branch}",

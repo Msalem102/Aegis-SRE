@@ -57,6 +57,8 @@ def test_live_github_pr_workflow_atomic_git_tree():
             return httpx.Response(201, json={"sha": "sha_new_commit_555"})
         elif "repos/my-org/novacart-store/git/refs" in url_str and method == "POST":
             return httpx.Response(201, json={"ref": "refs/heads/aegis/remediate-xyz"})
+        elif "repos/my-org/novacart-store/pulls" in url_str and method == "GET":
+            return httpx.Response(200, json=[])
         elif "repos/my-org/novacart-store/pulls" in url_str and method == "POST":
             return httpx.Response(201, json={
                 "number": 88,
@@ -130,3 +132,36 @@ def test_unified_diff_generation():
     assert "-amount: float" in diff_text
     assert "+amount_cents: int" in diff_text
     assert "--- a/src/client.py" in diff_text
+
+
+def test_live_github_pr_already_open_deduplication():
+    """Asserts that an existing open PR for the same incident is reused instead of creating duplicate PRs."""
+    def mock_transport(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        method = request.method
+        if "repos/my-org/novacart-store/pulls" in url_str and method == "GET":
+            return httpx.Response(200, json=[{
+                "number": 12,
+                "html_url": "https://github.com/my-org/novacart-store/pull/12",
+                "title": "fix(contract): auto-remediate upstream payment contract",
+                "head": {"ref": "aegis/remediate-inc-20261028-api-99-abc123"}
+            }])
+        elif "repos/my-org/novacart-store" in url_str and method == "GET":
+            return httpx.Response(200, json={"default_branch": "main", "full_name": "my-org/novacart-store"})
+        return httpx.Response(404, json={"message": "Not found"})
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(mock_transport))
+    engine = GitHubDeliveryEngine(github_token="ghp_mock_live_token_12345", client=mock_client)
+
+    res = engine.deliver_remediation_pr(
+        repo="my-org/novacart-store",
+        incident_id="INC-20261028-API-99",
+        pr_title="fix(contract): auto-remediate upstream payment contract",
+        pr_body="# Post-Mortem",
+        files_to_commit={"src/models.py": "class Charge:\n    pass\n"}
+    )
+
+    assert res["status"] == "LIVE_GITHUB_PR_ALREADY_OPEN"
+    assert res["pr_number"] == 12
+    assert res["html_url"] == "https://github.com/my-org/novacart-store/pull/12"
+    assert "already exists" in res["message"]

@@ -49,11 +49,10 @@ class AlertEventNormalizer:
         # Explicit vector hint if provided by sender (`"vector": "a"` or `"vector": "b"`)
         explicit_vector = str(raw_payload.get("vector") or event_obj.get("vector") or "").strip().lower()
 
-        event_uid = str(
+        explicit_uid = (
             raw_payload.get("incident_id")
             or event_obj.get("id")
             or event_obj.get("uuid")
-            or uuid.uuid4().hex[:12]
         )
         ts_tag = datetime.now(timezone.utc).strftime("%Y%m%d")
         service = str(
@@ -101,7 +100,9 @@ class AlertEventNormalizer:
         )
 
         if is_db_event and explicit_vector not in ("b", "api"):
-            inc_id = str(raw_payload.get("incident_id") or f"INC-{ts_tag}-DB-{event_uid[:6].upper()}")
+            fingerprint = f"{service}:{sql_query or event_name}"
+            event_uid = str(explicit_uid or f"db-{abs(hash(fingerprint)) % 100000000:08x}")
+            inc_id = str(raw_payload.get("incident_id") or f"INC-{ts_tag}-DB-{event_uid[-6:].upper()}")
             measured_lat = float(latency_ms) if latency_ms is not None else 2450.0
             cpu_pct = float(
                 raw_payload.get("host_cpu_percent")
@@ -178,8 +179,10 @@ class AlertEventNormalizer:
         )
 
         if is_api_event:
-            inc_id = str(raw_payload.get("incident_id") or f"INC-{ts_tag}-API-{event_uid[:6].upper()}")
             parsed_status = int(status_code) if (status_code and str(status_code).isdigit()) else 422
+            fingerprint = f"{service}:{endpoint or 'checkout'}:{parsed_status}:{event_name or 'error'}"
+            event_uid = str(explicit_uid or f"api-{abs(hash(fingerprint)) % 100000000:08x}")
+            inc_id = str(raw_payload.get("incident_id") or f"INC-{ts_tag}-API-{event_uid[-6:].upper()}")
             return {
                 "vector": "b",
                 "event_uid": event_uid,
