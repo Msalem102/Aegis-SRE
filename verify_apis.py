@@ -19,12 +19,22 @@ from typing import Dict, Any, Optional
 import httpx
 from dotenv import load_dotenv
 
-# Ensure UTF-8 console output on Windows
-if sys.stdout.encoding != "utf-8":
-    try:
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+# Ensure UTF-8 console output on Windows with safe error replacement
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
+# Force Modal to use stable reliable streaming protocol (avoids Windows gRPC stream hang)
+os.environ["MODAL_SANDBOX_V2"] = "false"
+try:
+    import modal.config
+    modal.config.config["sandbox_v2"] = False
+except Exception:
+    pass
 
 _root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
 if os.path.exists(_root_env):
@@ -130,21 +140,21 @@ def verify_meta_api(quiet: bool = False) -> Dict[str, Any]:
         return {"passed": False, "status": "ERROR", "error": err, "latency_ms": 0.0}
 
 
-def verify_modal_api(quiet: bool = False) -> Dict[str, Any]:
+def verify_modal_api(quiet: bool = False, timeout_seconds: float = 15.0) -> Dict[str, Any]:
     """Tests live connectivity to Modal Cloud Serverless and provisions a fast micro-VM probe."""
     token_id = (os.getenv("MODAL_TOKEN_ID") or "").strip().strip('"').strip("'")
     token_secret = (os.getenv("MODAL_TOKEN_SECRET") or "").strip().strip('"').strip("'")
 
     if not quiet:
-        print("\n[2/3] ☁️  Modal Cloud (Serverless Ephemeral Micro-VM Sandbox)...")
-        print(f" -> MODAL_TOKEN_ID:     {_mask(token_id)}")
-        print(f" -> MODAL_TOKEN_SECRET: {'Configured (Hidden)' if token_secret else 'NOT SET'}")
+        print("\n[2/3] ☁️  Modal Cloud (Serverless Ephemeral Micro-VM Sandbox)...", flush=True)
+        print(f" -> MODAL_TOKEN_ID:     {_mask(token_id)}", flush=True)
+        print(f" -> MODAL_TOKEN_SECRET: {'Configured (Hidden)' if token_secret else 'NOT SET'}", flush=True)
 
     if not token_id or not token_secret or "xxxx" in token_id:
         msg = "MODAL_TOKEN_ID or MODAL_TOKEN_SECRET missing in .env."
         if not quiet:
-            print(f" ⚠️  {msg}")
-            print("    Modal Cloud sandboxing requires valid Modal tokens in .env.")
+            print(f" ⚠️  {msg}", flush=True)
+            print("    Modal Cloud sandboxing requires valid Modal tokens in .env.", flush=True)
         return {"passed": False, "status": "TOKENS_MISSING", "error": msg}
 
     try:
@@ -152,31 +162,41 @@ def verify_modal_api(quiet: bool = False) -> Dict[str, Any]:
     except ImportError:
         err = "modal package not installed in current Python environment."
         if not quiet:
-            print(f" ❌ {err}")
+            print(f" ❌ {err}", flush=True)
         return {"passed": False, "status": "PACKAGE_MISSING", "error": err}
 
-    start_time = time.perf_counter()
-    try:
+    import concurrent.futures
+
+    def _execute_modal_probe():
+        start_time = time.perf_counter()
         app = modal.App.lookup("aegis-sre", create_if_missing=True)
         image = modal.Image.debian_slim()
 
-        # Execute fast container probe in Modal Cloud
+        # Execute fast container probe in Modal Cloud with unbuffered stdout
         sb = modal.Sandbox.create(
-            "python", "-c",
-            "import sys, platform; print(f'⚡ Micro-VM Active on {platform.system()} {platform.machine()} | Python {sys.version.split()[0]}')",
+            "python", "-u", "-c",
+            "import sys, platform; print(f'⚡ Micro-VM Active on {platform.system()} {platform.machine()} | Python {sys.version.split()[0]}', flush=True)",
             image=image,
             app=app,
-            timeout=45
+            timeout=20
         )
+
+        lines = []
+        try:
+            for raw_line in sb.stdout:
+                line = raw_line.strip()
+                if line:
+                    lines.append(line)
+                if len(lines) >= 1:
+                    break
+        except Exception:
+            pass
+
         sb.wait()
         elapsed_s = time.perf_counter() - start_time
-        stdout = sb.stdout.read().strip()
-        stderr = sb.stderr.read().strip()
+        stdout = "\n".join(lines) if lines else f"Micro-VM {sb.object_id} exited with code {sb.returncode}"
 
         if sb.returncode == 0:
-            if not quiet:
-                print(f" ✅ Modal Cloud Sandbox Verification SUCCESSFUL (Exit: 0)")
-                print(f"    └─ Micro-VM: {sb.object_id} | Spin-up + Exec: {elapsed_s:.2f}s | {stdout}")
             return {
                 "passed": True,
                 "status": "ONLINE",
@@ -185,14 +205,30 @@ def verify_modal_api(quiet: bool = False) -> Dict[str, Any]:
                 "remote_log": stdout
             }
         else:
-            err = f"Container failed (exit {sb.returncode}): {stderr}"
-            if not quiet:
-                print(f" ❌ Modal Cloud Container Error: {err}")
+            err = f"Container failed (exit {sb.returncode}): {stdout}"
             return {"passed": False, "status": "CONTAINER_ERROR", "error": err}
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_execute_modal_probe)
+            res = future.result(timeout=timeout_seconds)
+
+            if not quiet:
+                if res.get("passed"):
+                    print(f" ✅ Modal Cloud Sandbox Verification SUCCESSFUL (Exit: 0)", flush=True)
+                    print(f"    └─ Micro-VM: {res.get('object_id')} | Spin-up + Exec: {res.get('spinup_seconds', 0):.2f}s | {res.get('remote_log')}", flush=True)
+                else:
+                    print(f" ❌ Modal Cloud Container Error: {res.get('error')}", flush=True)
+            return res
+    except concurrent.futures.TimeoutError:
+        err = f"Modal Cloud probe timed out after {timeout_seconds}s (cloud latency or queue delay)"
+        if not quiet:
+            print(f" ⚠️  Modal Cloud Timeout: {err}", flush=True)
+        return {"passed": False, "status": "TIMEOUT", "error": err}
     except Exception as e:
         err = str(e)
         if not quiet:
-            print(f" ❌ Modal Cloud Verification Failed: {err}")
+            print(f" ❌ Modal Cloud Verification Failed: {err}", flush=True)
         return {"passed": False, "status": "ERROR", "error": err}
 
 
