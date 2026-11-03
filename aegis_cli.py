@@ -166,14 +166,34 @@ def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchd
 
     print("=" * 78)
     print(f"🛡️  AEGIS SRE Autonomous Webhook & Watchdog Daemon Listening on http://{host}:{port}")
-    print(f"   • Alert Webhook URL:   http://localhost:{port}/webhooks/alert")
-    print(f"   • Health Check URL:    http://localhost:{port}/health")
-    print(f"   • Direct DB Watchdog:  {'ENABLED' if watchdog else 'DISABLED (pass --watchdog to enable)'}")
+    print(f"   • SRE Control Plane UI: http://localhost:{port}/ (or /dashboard)")
+    print(f"   • Alert Webhook URL:    http://localhost:{port}/webhooks/alert")
+    print(f"   • Health Check URL:     http://localhost:{port}/health")
+    print(f"   • Direct DB Watchdog:   {'ENABLED' if watchdog else 'DISABLED (pass --watchdog to enable)'}")
     print("=" * 78)
 
     app = create_webhook_app(config_path=config_path, enable_db_watchdog=watchdog)
     uvicorn.run(app, host=host, port=port)
     return 0
+
+
+def cmd_ui(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchdog: bool = True, skip_verify: bool = False, no_browser: bool = False) -> int:
+    import webbrowser
+    import time
+    import threading
+
+    default_config = config_path if (config_path and os.path.exists(config_path)) else ("mockstore_aegis.yaml" if os.path.exists("mockstore_aegis.yaml") else "aegis.yaml")
+
+    if not no_browser:
+        def _open():
+            time.sleep(1.2)
+            try:
+                webbrowser.open(f"http://localhost:{port}/")
+            except Exception:
+                pass
+        threading.Thread(target=_open, daemon=True).start()
+
+    return cmd_listen(config_path=default_config, host=host, port=port, watchdog=watchdog, skip_verify=skip_verify)
 
 
 def cmd_verify(config_path: str) -> int:
@@ -232,6 +252,15 @@ def main() -> int:
     p_verify = subparsers.add_parser("verify", help="Verify live connectivity to Meta Model API, Modal Cloud, and GitHub")
     p_verify.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
 
+    # ui / dashboard
+    p_ui = subparsers.add_parser("ui", aliases=["dashboard"], help="Launch the Aegis SRE Web Dashboard & Control Plane")
+    p_ui.add_argument("--config", default="mockstore_aegis.yaml", help="Path to aegis.yaml or mockstore_aegis.yaml")
+    p_ui.add_argument("--host", default="0.0.0.0", help="Bind host (default: 0.0.0.0)")
+    p_ui.add_argument("--port", type=int, default=8080, help="Bind port (default: 8080)")
+    p_ui.add_argument("--no-watchdog", action="store_true", help="Disable direct DB watchdog")
+    p_ui.add_argument("--skip-verify", action="store_true", help="Skip pre-flight API verification checks")
+    p_ui.add_argument("--no-browser", action="store_true", help="Do not automatically open the browser")
+
     # deploy
     p_deploy = subparsers.add_parser("deploy", help="Deploy zero-idle-cost scale-to-zero Aegis SRE daemon onto Modal Cloud")
     p_deploy.add_argument("--config", default="aegis.yaml", help="Path to aegis.yaml manifest")
@@ -246,6 +275,8 @@ def main() -> int:
         return cmd_run(args.vector, args.config, query=args.query, skip_verify=args.skip_verify)
     elif args.command == "listen":
         return cmd_listen(args.config, host=args.host, port=args.port, watchdog=args.watchdog, skip_verify=args.skip_verify)
+    elif args.command in ("ui", "dashboard"):
+        return cmd_ui(args.config, host=args.host, port=args.port, watchdog=not args.no_watchdog, skip_verify=args.skip_verify, no_browser=args.no_browser)
     elif args.command == "verify":
         return cmd_verify(args.config)
     elif args.command == "deploy":

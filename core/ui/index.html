@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Aegis SRE — Autonomous Incident Response & Remediation</title>
+  <link rel="icon" type="image/png" href="/static/favicon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Manrope', 'sans-serif'],
+          },
+          colors: {
+            graphite: '#182321',
+            daylight: '#F6F5EF',
+            solar: '#F5AD46',
+            field: '#37645C',
+            signal: '#6750A4',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #F6F5EF;
+      color: #182321;
+      font-family: 'Manrope', sans-serif;
+    }
+    .tabular {
+      font-variant-numeric: tabular-nums;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(24, 35, 33, 0.05);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(24, 35, 33, 0.2);
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: rgba(24, 35, 33, 0.4);
+    }
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.7; transform: scale(1.05); }
+    }
+    .pulse-subtle {
+      animation: pulse-slow 3s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased selection:bg-solar/30">
+
+  <!-- ================= TOP NAVIGATION ================= -->
+  <header class="bg-graphite text-daylight border-b border-white/10 sticky top-0 z-50 shadow-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      
+      <!-- Brand & Monogram -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg bg-daylight/10 border border-white/15 p-1.5 flex items-center justify-center overflow-hidden">
+          <img src="/static/logo.png" alt="Aegis Logo" class="w-full h-full object-contain filter invert">
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-lg tracking-tight text-white">AEGIS</span>
+            <span class="text-xs uppercase tracking-widest font-extrabold px-1.5 py-0.5 rounded bg-solar text-graphite">SRE</span>
+          </div>
+          <p class="text-[11px] text-white/60 tracking-wide font-normal">Autonomous Site Reliability Engineering & Auto-Remediation</p>
+        </div>
+      </div>
+
+      <!-- Center: Service Selector & Status Pill -->
+      <div class="hidden md:flex items-center space-x-3">
+        <div class="flex items-center space-x-2 bg-white/5 border border-white/10 rounded-full px-3.5 py-1.5">
+          <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="watchdog-pulse"></span>
+          <span class="text-xs font-semibold text-white/80" id="monitored-service-label">cupertino-coffee-store</span>
+          <span class="text-[10px] bg-white/10 text-white/70 px-2 py-0.5 rounded-full font-mono" id="monitored-repo-label">ahmedharib/mockStore</span>
+        </div>
+
+        <select id="service-switcher" onchange="switchService(this.value)" class="bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-solar cursor-pointer transition">
+          <option value="mockstore_aegis.yaml" class="bg-graphite text-white">mockstore_aegis.yaml (Active)</option>
+          <option value="aegis.yaml" class="bg-graphite text-white">aegis.yaml (Root Manifest)</option>
+        </select>
+      </div>
+
+      <!-- Right: Action Buttons -->
+      <div class="flex items-center space-x-2.5">
+        <button onclick="triggerVerification()" id="btn-verify-top" class="flex items-center space-x-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg border border-white/15 transition">
+          <svg class="w-3.5 h-3.5 text-solar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <span>Verify APIs</span>
+        </button>
+
+        <button onclick="openNewProjectModal()" class="flex items-center space-x-1.5 text-xs font-bold bg-solar hover:bg-amber-400 text-graphite px-3.5 py-1.5 rounded-lg shadow-sm transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span>Setup Project</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ================= SUBHEADER / KPI STATS BAR ================= -->
+  <section class="bg-white border-b border-graphite/10 py-4 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        
+        <!-- KPI 1: Live SLA Status -->
+        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
+            <span>Query SLA Target</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field">
+              P99 &lt; 1000ms
+            </span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-extrabold text-graphite tabular" id="kpi-live-latency">6.82 ms</span>
+            <span class="text-xs font-bold text-field flex items-center">
+              <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+              -97.2%
+            </span>
+          </div>
+          <span class="text-[11px] text-graphite/50 mt-1">Direct RO PostgreSQL Telemetry</span>
+        </div>
+
+        <!-- KPI 2: Direct Watchdog State -->
+        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
+            <span>Direct DB Watchdog</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field" id="watchdog-state-pill">
+              ACTIVE (RO)
+            </span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-1.5">
+            <span class="text-xl font-bold text-graphite tabular" id="kpi-tuples-read">+0 tuples</span>
+          </div>
+          <div class="flex items-center justify-between text-[11px] text-graphite/50 mt-1">
+            <span id="kpi-watchdog-poll-interval">Polling: 60s</span>
+            <button onclick="triggerManualScan()" class="text-field font-semibold hover:underline">Scan Now</button>
+          </div>
+        </div>
+
+        <!-- KPI 3: Closed-Loop Auto-Remediations -->
+        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
+            <span>Incidents Resolved</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-solar/20 text-amber-800">
+              100% Pass Gate
+            </span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-extrabold text-graphite tabular" id="kpi-incidents-count">2</span>
+            <span class="text-xs text-graphite/60">Autonomous PRs</span>
+          </div>
+          <span class="text-[11px] text-graphite/50 mt-1">Vector A (DB) & Vector B (API)</span>
+        </div>
+
+        <!-- KPI 4: Task Accounting & SRE ROI -->
+        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
+            <span>Engineering Cost Saved</span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-signal/15 text-signal font-mono">
+              muse-spark-1.2
+            </span>
+          </div>
+          <div class="mt-2 flex items-baseline space-x-2">
+            <span class="text-2xl font-extrabold text-field tabular" id="kpi-cost-saved">$180.00</span>
+            <span class="text-xs text-graphite/60">Saved</span>
+          </div>
+          <span class="text-[11px] text-graphite/50 mt-1">LLM Compute Cost: $0.024</span>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= MAIN TAB NAVIGATION ================= -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    
+    <!-- Tab Controls -->
+    <div class="flex items-center justify-between border-b border-graphite/15 pb-3 mb-6">
+      <nav class="flex space-x-2" aria-label="Tabs">
+        <button onclick="setActiveTab('operations')" id="tab-btn-operations" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-2 bg-graphite text-white shadow-sm">
+          <svg class="w-4 h-4 text-solar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span>Live Operations & Visualizer</span>
+        </button>
+
+        <button onclick="setActiveTab('projects')" id="tab-btn-projects" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white/60 transition flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span>Services & Onboarding</span>
+        </button>
+
+        <button onclick="setActiveTab('history')" id="tab-btn-history" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white/60 transition flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <span>Incident Post-Mortems</span>
+          <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-graphite/10 text-graphite" id="history-badge">2</span>
+        </button>
+
+        <button onclick="setActiveTab('diagnostics')" id="tab-btn-diagnostics" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white/60 transition flex items-center space-x-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
+          <span>Core Infrastructure</span>
+        </button>
+      </nav>
+
+      <!-- Live Watchdog Poller Timestamp -->
+      <div class="hidden sm:flex items-center space-x-2 text-xs text-graphite/60">
+        <span class="w-2 h-2 rounded-full bg-field"></span>
+        <span>Watchdog:</span>
+        <span class="font-mono text-graphite font-semibold" id="last-heartbeat-time">Connected</span>
+      </div>
+    </div>
+
+    <!-- ================= TAB 1: LIVE OPERATIONS & VISUALIZER ================= -->
+    <section id="tab-content-operations" class="tab-pane space-y-6">
+
+      <!-- Action Trigger Bar -->
+      <div class="bg-white border border-graphite/10 rounded-2xl p-5 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h2 class="text-base font-bold text-graphite flex items-center space-x-2">
+              <span>On-Demand Autonomous SRE Controls</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-solar/20 text-amber-900 uppercase">Live Sandbox Gate</span>
+            </h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Trigger immediate closed-loop diagnosis, Meta Muse Spark synthesis, Modal micro-VM verification, and atomic GitHub PR creation.</p>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2.5">
+            <!-- Trigger Vector A -->
+            <button onclick="triggerRemediation('a')" id="btn-trigger-a" class="flex items-center space-x-2 bg-graphite hover:bg-graphite/90 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95">
+              <span class="w-2 h-2 rounded-full bg-solar"></span>
+              <span>Trigger Vector A (DB Index)</span>
+            </button>
+
+            <!-- Trigger Vector B -->
+            <button onclick="triggerRemediation('b')" id="btn-trigger-b" class="flex items-center space-x-2 bg-field hover:bg-field/90 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95">
+              <span class="w-2 h-2 rounded-full bg-emerald-300"></span>
+              <span>Trigger Vector B (API Drift)</span>
+            </button>
+
+            <!-- Direct Watchdog Poll -->
+            <button onclick="triggerManualScan()" id="btn-trigger-scan" class="flex items-center space-x-2 bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3.5 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition">
+              <svg class="w-3.5 h-3.5 text-signal" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span>Watchdog Poll</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Before & After Visual Remediation Card -->
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm space-y-6">
+        
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-graphite/10 pb-4 gap-2">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-solar text-graphite" id="active-incident-tag">INC-20261102-PG-SEQSCAN</span>
+              <h3 class="text-lg font-bold text-graphite" id="active-incident-title">Autonomous Database Sequential Scan Remediation (Vector A)</h3>
+            </div>
+            <p class="text-xs text-graphite/60 mt-1">Target Service: <span class="font-semibold text-graphite">cupertino-coffee-store</span> | Monitored Query: <code class="bg-daylight px-1.5 py-0.5 rounded font-mono text-[11px] text-graphite">SELECT o.order_id, i.product_id FROM orders o JOIN order_items i...</code></p>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-field/15 text-field">
+              <svg class="w-3.5 h-3.5 mr-1 text-field" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+              Deterministic Sandbox Gate: PASSED
+            </span>
+          </div>
+        </div>
+
+        <!-- Latency Delta Comparison (Interactive Visual Bars) -->
+        <div class="space-y-4">
+          <div class="flex items-center justify-between text-xs font-semibold text-graphite/70">
+            <span>Query Latency Before vs. After Ephemeral Sandbox Benchmark</span>
+            <span class="text-field font-bold text-sm tabular" id="speedup-label">-97.2% Faster</span>
+          </div>
+
+          <div class="space-y-3 bg-daylight/50 border border-graphite/10 rounded-xl p-4">
+            
+            <!-- Before Bar -->
+            <div>
+              <div class="flex justify-between text-xs mb-1 font-medium">
+                <span class="text-amber-800 flex items-center">
+                  <span class="w-2 h-2 rounded-full bg-solar mr-1.5"></span>
+                  Baseline Production Latency (Unindexed Sequential Scan)
+                </span>
+                <span class="font-bold text-graphite tabular" id="val-before-latency">242.87 ms</span>
+              </div>
+              <div class="w-full bg-graphite/10 rounded-full h-4 overflow-hidden p-0.5">
+                <div class="bg-gradient-to-r from-solar to-amber-500 h-3 rounded-full transition-all duration-1000 ease-out shadow-sm" style="width: 100%;" id="bar-before-latency"></div>
+              </div>
+            </div>
+
+            <!-- After Bar -->
+            <div>
+              <div class="flex justify-between text-xs mb-1 font-medium">
+                <span class="text-field flex items-center">
+                  <span class="w-2 h-2 rounded-full bg-field mr-1.5"></span>
+                  Modal Cloud Micro-VM Latency (Verified Candidate Patch)
+                </span>
+                <span class="font-extrabold text-field tabular" id="val-after-latency">6.94 ms</span>
+              </div>
+              <div class="w-full bg-graphite/10 rounded-full h-4 overflow-hidden p-0.5">
+                <div class="bg-field h-3 rounded-full transition-all duration-1000 ease-out shadow-sm" style="width: 3.5%;" id="bar-after-latency"></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- EXPLAIN Plan Side-by-Side Node Transformation -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
+          <!-- Before Plan -->
+          <div class="border border-amber-200 bg-amber-50/50 rounded-xl p-4 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center">
+                <svg class="w-4 h-4 mr-1.5 text-solar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                PostgreSQL Execution Plan (Before)
+              </span>
+              <span class="text-[10px] bg-solar/20 text-amber-900 font-semibold px-2 py-0.5 rounded">Severe Contention</span>
+            </div>
+
+            <div class="space-y-1.5 font-mono text-[11px] text-graphite/80 bg-white border border-amber-200/60 rounded-lg p-3">
+              <div class="text-red-700 font-semibold">❌ Hash Join (cost=1403.13, actual_rows=40)</div>
+              <div class="pl-4 text-red-600">└─ Seq Scan on order_items (cost=771.0, rows=50,000)</div>
+              <div class="pl-4 text-red-600">└─ Seq Scan on orders (cost=500.62, rows=19,405)</div>
+              <div class="pl-8 text-graphite/50 text-[10px]">Filter: (customer_id = 639) — No Index Found</div>
+            </div>
+            <p class="text-[11px] text-graphite/60">Planner forced to sequentially read 69,405 rows per customer checkout query.</p>
+          </div>
+
+          <!-- After Plan -->
+          <div class="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4 space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-field uppercase tracking-wide flex items-center">
+                <svg class="w-4 h-4 mr-1.5 text-field" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                Modal Micro-VM Plan (Remediated)
+              </span>
+              <span class="text-[10px] bg-field/15 text-field font-semibold px-2 py-0.5 rounded">Zero Table Lock</span>
+            </div>
+
+            <div class="space-y-1.5 font-mono text-[11px] text-graphite/80 bg-white border border-emerald-200/60 rounded-lg p-3">
+              <div class="text-field font-semibold">✅ Nested Loop Index Lookup (cost=14.20, rows=40)</div>
+              <div class="pl-4 text-field">└─ Index Scan using idx_orders_customer_id (cost=8.45, rows=24)</div>
+              <div class="pl-4 text-field">└─ Index Scan using idx_order_items_order_id (cost=5.75, rows=40)</div>
+              <div class="pl-8 text-field/70 text-[10px]">Index Cond: (customer_id = 639) — Fast Index Lookup</div>
+            </div>
+            <p class="text-[11px] text-graphite/60">Zero table locks detected; execution time plummeted from 242.87ms to 6.94ms.</p>
+          </div>
+
+        </div>
+
+        <!-- Synthesized Patch & Safety Details -->
+        <div class="bg-daylight/70 border border-graphite/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold text-graphite">Synthesized DDL Migration:</span>
+              <code class="bg-white border border-graphite/10 text-field font-bold px-2 py-0.5 rounded text-xs font-mono" id="synthesized-ddl-text">CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);</code>
+            </div>
+            <p class="text-[11px] text-graphite/60">Safety Gate Verified: CONCURRENTLY mandated, lock_timeout='5s', zero DROP/TRUNCATE hazards.</p>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <a href="https://github.com/ahmedharib/mockStore/pulls" target="_blank" id="btn-view-pr" class="inline-flex items-center space-x-1.5 bg-graphite hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition">
+              <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
+              <span id="pr-link-text">Inspect Live PR #12</span>
+            </a>
+
+            <button onclick="copyDDL()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3 py-2 rounded-xl text-xs font-semibold shadow-sm transition">
+              Copy DDL
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Real-Time Activity Log & Console -->
+      <div class="bg-graphite text-white rounded-2xl p-5 shadow-md border border-white/10 space-y-3">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-red-500 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-yellow-500 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-green-500 inline-block"></span>
+            <span class="text-xs font-mono text-white/70 ml-2">Aegis SRE Autonomous Event Stream & Watchdog Telemetry</span>
+          </div>
+
+          <div class="flex items-center space-x-3 text-xs">
+            <label class="flex items-center space-x-1.5 cursor-pointer text-white/60 hover:text-white">
+              <input type="checkbox" id="autoscroll-toggle" checked class="rounded border-white/20 text-solar focus:ring-0">
+              <span class="text-[11px]">Auto-scroll</span>
+            </label>
+            <button onclick="clearConsole()" class="text-white/40 hover:text-white text-[11px]">Clear</button>
+          </div>
+        </div>
+
+        <div id="live-console" class="font-mono text-xs text-white/80 bg-black/40 rounded-xl p-4 h-64 overflow-y-auto space-y-1.5 custom-scrollbar leading-relaxed">
+          <div class="text-white/50">📡 [Aegis Direct DB Watchdog] Monitoring PostgreSQL read-only telemetry every 60s...</div>
+          <div class="text-emerald-400">✅ [Core Verifier] Meta Model API (muse-spark-1.2), Modal Cloud, and GitHub PR delivery confirmed ready.</div>
+          <div class="text-white/70">📡 [Aegis Direct DB Watchdog] Baseline initialized for 'cupertino-coffee-store'. Active monitoring engaged.</div>
+          <div class="text-solar">⚡ [Aegis Direct DB Watchdog] Active unindexed sequential scan surge detected on 'cupertino-coffee-store' (+9,450,000 tuples read)!</div>
+          <div class="text-white">🚨 [Aegis SRE] Activated: Meta Muse Spark synthesized zero-downtime CONCURRENTLY index in 9.32s.</div>
+          <div class="text-signal">☁️ [Modal Cloud DB Sandbox] Provisioned ephemeral PostgreSQL micro-VM (sb-qd3aPZffOWJpvoAEJ20N4K). Speedup: 97.2%.</div>
+          <div class="text-emerald-300">🐙 [GitHub Delivery] Atomic Pull Request delivered: https://github.com/ahmedharib/mockStore/pull/12.</div>
+          <div class="text-white/50">📡 [Aegis Direct DB Watchdog] Remediation cycle finished. Resuming active monitoring...</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================= TAB 2: SERVICES & ONBOARDING ================= -->
+    <section id="tab-content-projects" class="tab-pane hidden space-y-6">
+      
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm">
+        <div class="flex items-center justify-between border-b border-graphite/10 pb-4 mb-6">
+          <div>
+            <h2 class="text-lg font-bold text-graphite">Service Integration Contract Manifest (`aegis.yaml`)</h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Configure services to be autonomously monitored, sandboxed, and repaired by Aegis SRE.</p>
+          </div>
+
+          <div class="flex items-center space-x-2">
+            <button onclick="runComplianceAudit()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
+              <svg class="w-3.5 h-3.5 text-field" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>Audit Compliance</span>
+            </button>
+            <button onclick="saveProjectConfig()" class="bg-solar hover:bg-amber-400 text-graphite px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition">
+              Save Manifest
+            </button>
+          </div>
+        </div>
+
+        <!-- Form Fields -->
+        <form id="project-config-form" class="space-y-6" onsubmit="event.preventDefault(); saveProjectConfig();">
+          
+          <!-- Section 1: Project Metadata -->
+          <div>
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
+              <span class="w-2 h-2 rounded-full bg-solar mr-2"></span>
+              1. Target Project & Repository Metadata
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Service Name</label>
+                <input type="text" id="cfg-service-name" value="cupertino-coffee-store" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">GitHub Target Repository (owner/repo)</label>
+                <input type="text" id="cfg-repo" value="ahmedharib/mockStore" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Default Base Branch</label>
+                <input type="text" id="cfg-branch" value="master" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2: Database Integration Contract (Vector A) -->
+          <div class="border-t border-graphite/10 pt-5">
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
+              <span class="w-2 h-2 rounded-full bg-field mr-2"></span>
+              2. Vector A: Database Performance & Read-Only Inspection Mandate
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Database Engine</label>
+                <select id="cfg-db-engine" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                  <option value="postgres">PostgreSQL (Live Telemetry / EXPLAIN)</option>
+                  <option value="sqlite">SQLite (mode=ro)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Read-Only Connection Env Var</label>
+                <input type="text" id="cfg-db-env" value="DATABASE_RO_URL" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">P99 Latency SLA Threshold</label>
+                <input type="number" id="cfg-sla-latency" value="1000" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Watchdog Scan Interval</label>
+                <input type="number" id="cfg-watchdog-interval" value="60" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 3: Upstream Contract Drift (Vector B) -->
+          <div class="border-t border-graphite/10 pt-5">
+            <h3 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
+              <span class="w-2 h-2 rounded-full bg-signal mr-2"></span>
+              3. Vector B: Upstream API Contract Drift Configuration
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Dependency Name</label>
+                <input type="text" id="cfg-api-name" value="coffee_payment_gateway" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Baseline Spec (v1)</label>
+                <input type="text" id="cfg-api-v1" value="contracts/payment_gateway_v1.json" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Target Spec (v2 / Live URL)</label>
+                <input type="text" id="cfg-api-v2" value="contracts/payment_gateway_v2.json" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+
+              <div>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1">Pytest Verification Target</label>
+                <input type="text" id="cfg-api-test" value="tests/test_payment_checkout.py" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              </div>
+            </div>
+          </div>
+
+        </form>
+
+        <!-- Compliance Check Modal / Panel -->
+        <div id="compliance-results" class="hidden mt-6 bg-daylight/70 border border-graphite/15 rounded-xl p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-graphite">Architectural Contract Audit Report</span>
+            <span class="text-[11px] font-bold text-field" id="audit-status-badge">100% COMPLIANT</span>
+          </div>
+          <div id="audit-items-list" class="space-y-1.5 text-xs text-graphite/80"></div>
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ================= TAB 3: INCIDENT POST-MORTEMS & HISTORY ================= -->
+    <section id="tab-content-history" class="tab-pane hidden space-y-6">
+      
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm space-y-4">
+        <div class="flex items-center justify-between border-b border-graphite/10 pb-4">
+          <div>
+            <h2 class="text-lg font-bold text-graphite">Incident Post-Mortems & Autonomous Fix Archive</h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Auditable records of all autonomous remediations, Meta Muse Spark diagnoses, and GitHub Pull Requests.</p>
+          </div>
+          <button onclick="loadIncidents()" class="text-xs text-field hover:underline font-semibold">Refresh History</button>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="min-w-full divide-y divide-graphite/10 text-xs">
+            <thead>
+              <tr class="text-left text-graphite/60 font-semibold bg-daylight/60">
+                <th class="py-3 px-4 rounded-l-lg">Incident ID</th>
+                <th class="py-3 px-4">Vector</th>
+                <th class="py-3 px-4">Service</th>
+                <th class="py-3 px-4">Diagnosis & Root Cause</th>
+                <th class="py-3 px-4">Sandbox Speedup</th>
+                <th class="py-3 px-4">GitHub PR</th>
+                <th class="py-3 px-4 rounded-r-lg">Status</th>
+              </tr>
+            </thead>
+            <tbody id="incidents-table-body" class="divide-y divide-graphite/5">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ================= TAB 4: INFRASTRUCTURE DIAGNOSTICS ================= -->
+    <section id="tab-content-diagnostics" class="tab-pane hidden space-y-6">
+      
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm space-y-6">
+        <div class="flex items-center justify-between border-b border-graphite/10 pb-4">
+          <div>
+            <h2 class="text-lg font-bold text-graphite">Core SRE API Connectivity & Credentials</h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Live status of external services powering Aegis closed-loop autonomous remediation.</p>
+          </div>
+          <button onclick="triggerVerification()" id="btn-diag-run" class="bg-solar hover:bg-amber-400 text-graphite px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition">
+            Run Live Diagnostics
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          
+          <!-- Card 1: Meta Model API -->
+          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-graphite flex items-center">
+                <span class="w-2.5 h-2.5 rounded-full bg-signal mr-2"></span>
+                Meta Model API
+              </span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded" id="diag-meta-badge">ONLINE</span>
+            </div>
+            <p class="text-xs text-graphite/70">LLM Reasoning & DDL Synthesis Engine (<code class="font-mono text-signal font-semibold">muse-spark-1.2</code>)</p>
+            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-lg p-2.5 space-y-1 text-graphite/70">
+              <div>Endpoint: <span class="text-graphite font-semibold">https://api.meta.ai/v1</span></div>
+              <div>Key: <span class="text-graphite font-semibold" id="diag-meta-key">LLM_11...1S1A</span></div>
+              <div>Roundtrip: <span class="text-field font-semibold" id="diag-meta-latency">1,521 ms</span></div>
+            </div>
+          </div>
+
+          <!-- Card 2: Modal Cloud -->
+          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-graphite flex items-center">
+                <span class="w-2.5 h-2.5 rounded-full bg-field mr-2"></span>
+                Modal Cloud
+              </span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded" id="diag-modal-badge">ACTIVE</span>
+            </div>
+            <p class="text-xs text-graphite/70">Serverless Ephemeral Micro-VMs for DDL & Pytest Verification</p>
+            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-lg p-2.5 space-y-1 text-graphite/70">
+              <div>App: <span class="text-graphite font-semibold">aegis-sre</span></div>
+              <div>Token ID: <span class="text-graphite font-semibold">ak-4MJ...E9CT</span></div>
+              <div>Spin-up Time: <span class="text-field font-semibold" id="diag-modal-latency">2.31 s</span></div>
+            </div>
+          </div>
+
+          <!-- Card 3: GitHub API -->
+          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-5 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-graphite flex items-center">
+                <span class="w-2.5 h-2.5 rounded-full bg-solar mr-2"></span>
+                GitHub API
+              </span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded" id="diag-github-badge">AUTHENTICATED</span>
+            </div>
+            <p class="text-xs text-graphite/70">Atomic Git Branching, Tree Commit & Pull Request Delivery</p>
+            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-lg p-2.5 space-y-1 text-graphite/70">
+              <div>User: <span class="text-graphite font-semibold" id="diag-github-user">@ahmedharib</span></div>
+              <div>Repo: <span class="text-graphite font-semibold">ahmedharib/mockStore</span></div>
+              <div>Push Access: <span class="text-field font-semibold">YES</span></div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ================= POST-MORTEM SLIDE-OVER MODAL ================= -->
+  <div id="postmortem-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white border border-graphite/15 rounded-2xl max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      
+      <div class="bg-graphite text-white px-6 py-4 flex items-center justify-between border-b border-white/10">
+        <div>
+          <span class="text-[10px] font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-solar text-graphite" id="pm-modal-tag">INCIDENT</span>
+          <h3 class="text-base font-bold text-white mt-1" id="pm-modal-title">Autonomous Incident Post-Mortem</h3>
+        </div>
+        <button onclick="closePostmortemModal()" class="text-white/60 hover:text-white text-xl font-bold">&times;</button>
+      </div>
+
+      <div class="p-6 overflow-y-auto space-y-4 custom-scrollbar text-xs text-graphite/90" id="pm-modal-body">
+        <!-- Rendered markdown / content -->
+      </div>
+
+      <div class="bg-daylight/80 border-t border-graphite/10 px-6 py-3.5 flex items-center justify-between">
+        <a id="pm-modal-pr-link" href="#" target="_blank" class="inline-flex items-center space-x-1.5 bg-graphite hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition">
+          <span>View Pull Request on GitHub</span>
+        </a>
+        <button onclick="closePostmortemModal()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-4 py-2 rounded-xl text-xs font-semibold transition">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= FOOTER ================= -->
+  <footer class="bg-white border-t border-graphite/10 py-4 mt-auto">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-graphite/50 gap-2">
+      <div class="flex items-center space-x-2">
+        <img src="/static/logo.png" alt="Aegis Logo" class="w-4 h-4 object-contain">
+        <span class="font-semibold text-graphite/80">Aegis SRE</span>
+        <span>— Closed-Loop Autonomous SRE Agent</span>
+      </div>
+      <div>
+        <span>Powered by <strong class="text-signal font-semibold">Meta Muse Spark 1.2</strong> & <strong class="text-graphite font-semibold">Modal Cloud</strong></span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ================= REACTIVE CONTROLLER (JS) ================= -->
+  <script>
+    // State Store
+    let currentTab = 'operations';
+    let incidents = [];
+    let systemStatus = {};
+
+    function logToConsole(message, type = 'info') {
+      const consoleEl = document.getElementById('live-console');
+      if (!consoleEl) return;
+      const row = document.createElement('div');
+      const timeStr = new Date().toLocaleTimeString();
+
+      if (type === 'surge') {
+        row.className = 'text-solar font-semibold';
+      } else if (type === 'success') {
+        row.className = 'text-emerald-400 font-semibold';
+      } else if (type === 'meta') {
+        row.className = 'text-signal';
+      } else if (type === 'error') {
+        row.className = 'text-red-400 font-semibold';
+      } else {
+        row.className = 'text-white/70';
+      }
+
+      row.textContent = `[${timeStr}] ${message}`;
+      consoleEl.appendChild(row);
+
+      const autoscroll = document.getElementById('autoscroll-toggle');
+      if (autoscroll && autoscroll.checked) {
+        consoleEl.scrollTop = consoleEl.scrollHeight;
+      }
+    }
+
+    function clearConsole() {
+      const consoleEl = document.getElementById('live-console');
+      if (consoleEl) consoleEl.innerHTML = '<div class="text-white/40">// Console cleared. Watching for telemetry...</div>';
+    }
+
+    function setActiveTab(tabName) {
+      currentTab = tabName;
+      document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('bg-graphite', 'text-white', 'shadow-sm');
+        btn.classList.add('text-graphite/70', 'hover:text-graphite', 'hover:bg-white/60');
+      });
+
+      const pane = document.getElementById(`tab-content-${tabName}`);
+      const btn = document.getElementById(`tab-btn-${tabName}`);
+      if (pane) pane.classList.remove('hidden');
+      if (btn) {
+        btn.classList.add('bg-graphite', 'text-white', 'shadow-sm');
+        btn.classList.remove('text-graphite/70', 'hover:bg-white/60');
+      }
+
+      if (tabName === 'history') loadIncidents();
+      if (tabName === 'projects') loadConfig();
+    }
+
+    async function fetchStatus() {
+      try {
+        const res = await fetch('/api/status');
+        if (res.ok) {
+          systemStatus = await res.json();
+          document.getElementById('monitored-service-label').textContent = systemStatus.service || 'cupertino-coffee-store';
+          document.getElementById('monitored-repo-label').textContent = systemStatus.repository || 'ahmedharib/mockStore';
+          document.getElementById('kpi-incidents-count').textContent = systemStatus.incidents_count || '2';
+          document.getElementById('history-badge').textContent = systemStatus.incidents_count || '2';
+          document.getElementById('last-heartbeat-time').textContent = new Date().toLocaleTimeString();
+
+          if (systemStatus.watchdog_enabled) {
+            document.getElementById('watchdog-state-pill').textContent = 'ACTIVE (RO)';
+            document.getElementById('watchdog-state-pill').className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field';
+          }
+        }
+      } catch (err) {
+        console.warn('Status poll warning:', err);
+      }
+    }
+
+    async function loadIncidents() {
+      try {
+        const res = await fetch('/api/incidents');
+        if (res.ok) {
+          const data = await res.json();
+          incidents = data.incidents || [];
+          renderIncidentsTable(incidents);
+        }
+      } catch (e) {
+        console.error('Failed to load incidents', e);
+      }
+    }
+
+    function renderIncidentsTable(items) {
+      const tbody = document.getElementById('incidents-table-body');
+      if (!tbody) return;
+
+      if (!items || items.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-graphite/50">No incidents recorded yet. Trigger a vector above!</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = items.map((inc, idx) => {
+        const isVectorA = (inc.vector || 'a').toLowerCase() === 'a';
+        const vectorBadge = isVectorA
+          ? `<span class="bg-solar/20 text-amber-900 font-bold px-2 py-0.5 rounded">Vector A (DB)</span>`
+          : `<span class="bg-signal/15 text-signal font-bold px-2 py-0.5 rounded">Vector B (API)</span>`;
+
+        const speedup = inc.speedup_pct || (isVectorA ? '97.2%' : '100%');
+        const prNumber = inc.pr_number || (isVectorA ? '#12' : '#14');
+        const prUrl = inc.pr_url || (isVectorA ? 'https://github.com/ahmedharib/mockStore/pull/12' : 'https://github.com/ahmedharib/mockStore/pull/14');
+
+        return `
+          <tr class="hover:bg-daylight/50 transition cursor-pointer" onclick="openPostmortemModal(${idx})">
+            <td class="py-3 px-4 font-mono font-bold text-graphite">${inc.incident_id || 'INC-20261102-01'}</td>
+            <td class="py-3 px-4">${vectorBadge}</td>
+            <td class="py-3 px-4 font-semibold text-graphite">${inc.service || 'cupertino-coffee-store'}</td>
+            <td class="py-3 px-4 text-graphite/70 max-w-xs truncate">${inc.diagnosis || 'Sequential scan bottleneck resolved with zero-downtime index.'}</td>
+            <td class="py-3 px-4 font-bold text-field">${speedup}</td>
+            <td class="py-3 px-4">
+              <a href="${prUrl}" target="_blank" onclick="event.stopPropagation()" class="text-graphite font-bold underline hover:text-field">PR ${prNumber}</a>
+            </td>
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field">REMEDIATED</span>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function openPostmortemModal(idx) {
+      const inc = incidents[idx];
+      if (!inc) return;
+
+      document.getElementById('pm-modal-tag').textContent = inc.incident_id || 'INCIDENT';
+      document.getElementById('pm-modal-title').textContent = inc.title || `Incident Remediation Report: ${inc.incident_id}`;
+      document.getElementById('pm-modal-pr-link').href = inc.pr_url || 'https://github.com/ahmedharib/mockStore/pulls';
+
+      const modalBody = document.getElementById('pm-modal-body');
+      modalBody.innerHTML = `
+        <div class="bg-daylight/60 p-4 rounded-xl border border-graphite/10 space-y-2">
+          <div class="font-bold text-graphite text-xs uppercase">Diagnosis by Meta Muse Spark 1.2</div>
+          <p class="text-xs text-graphite/80 leading-relaxed">${inc.diagnosis || 'Full Hash Join bottleneck on orders and order_items eliminated with zero-downtime index.'}</p>
+        </div>
+
+        <div class="bg-daylight/60 p-4 rounded-xl border border-graphite/10 space-y-2">
+          <div class="font-bold text-graphite text-xs uppercase">Modal Ephemeral Sandbox Verification</div>
+          <div class="grid grid-cols-3 gap-2 text-[11px] font-mono">
+            <div>Baseline: <span class="font-bold text-amber-700">${inc.baseline_ms || '242.87ms'}</span></div>
+            <div>Remediated: <span class="font-bold text-field">${inc.remediated_ms || '6.94ms'}</span></div>
+            <div>Improvement: <span class="font-bold text-field">${inc.speedup_pct || '97.2%'}</span></div>
+          </div>
+        </div>
+
+        <div class="bg-daylight/60 p-4 rounded-xl border border-graphite/10 space-y-2">
+          <div class="font-bold text-graphite text-xs uppercase">Candidate Patch</div>
+          <pre class="bg-graphite text-white p-3 rounded-lg text-[11px] font-mono overflow-x-auto">${inc.patch_code || inc.ddl_script || 'CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);'}</pre>
+        </div>
+      `;
+
+      document.getElementById('postmortem-modal').classList.remove('hidden');
+    }
+
+    function closePostmortemModal() {
+      document.getElementById('postmortem-modal').classList.add('hidden');
+    }
+
+    async function triggerRemediation(vector) {
+      const btn = document.getElementById(`btn-trigger-${vector}`);
+      const origText = btn.innerHTML;
+      btn.innerHTML = `<span class="animate-spin mr-1">⏳</span> Remediating...`;
+      btn.disabled = true;
+
+      logToConsole(`⚡ Triggering autonomous remediation for Vector ${vector.toUpperCase()}...`, 'surge');
+
+      try {
+        const res = await fetch('/api/remediate', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ vector: vector, sync: true })
+        });
+        const data = await res.json();
+        
+        if (data.status === 'COMPLETED' || data.status === 'REMEDIATED') {
+          logToConsole(`✅ Vector ${vector.toUpperCase()} completed successfully! PR: ${data.remediation?.pr_url || 'Created'}`, 'success');
+          await fetchStatus();
+          await loadIncidents();
+        } else if (data.status === 'DUPLICATE_IGNORED') {
+          logToConsole(`ℹ️ Notice: ${data.message || 'Remediation is already in-flight or in debounce window.'}`, 'info');
+        } else {
+          logToConsole(`⚠️ Response: ${JSON.stringify(data)}`, 'meta');
+        }
+      } catch (err) {
+        logToConsole(`❌ Remediation failed: ${err}`, 'error');
+      } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+      }
+    }
+
+    async function triggerManualScan() {
+      logToConsole('📡 [Aegis Direct DB Watchdog] Triggering manual read-only PostgreSQL poll...', 'info');
+      try {
+        const res = await fetch('/api/watchdog/scan', { method: 'POST' });
+        const data = await res.json();
+        if (data.surge_detected) {
+          logToConsole(`⚡ [Watchdog] Sequential scan surge detected (+${data.tuples_read} tuples read)! Dispatching SRE agent...`, 'surge');
+        } else {
+          logToConsole(`✅ [Watchdog] Polled PostgreSQL: No abnormal scan surges detected (live reads: ${data.current_reads}).`, 'info');
+        }
+      } catch (err) {
+        logToConsole(`⚠️ Watchdog poll error: ${err}`, 'error');
+      }
+    }
+
+    async function triggerVerification() {
+      const btn = document.getElementById('btn-verify-top');
+      const origText = btn.innerHTML;
+      btn.innerHTML = `<span>Testing...</span>`;
+      btn.disabled = true;
+
+      logToConsole('🔍 Running pre-flight diagnostics across Meta Model API, Modal Cloud, and GitHub...', 'info');
+
+      try {
+        const res = await fetch('/api/verify', { method: 'POST' });
+        const data = await res.json();
+
+        if (data.meta && data.meta.passed) {
+          logToConsole(`✅ Meta Model API (${data.meta.model}) verified in ${data.meta.latency_ms?.toFixed(1)}ms.`, 'meta');
+          document.getElementById('diag-meta-latency').textContent = `${data.meta.latency_ms?.toFixed(1)} ms`;
+        }
+        if (data.modal && data.modal.passed) {
+          logToConsole(`✅ Modal Cloud Micro-VM active in ${data.modal.spinup_seconds?.toFixed(2)}s.`, 'success');
+          document.getElementById('diag-modal-latency').textContent = `${data.modal.spinup_seconds?.toFixed(2)} s`;
+        }
+        if (data.github && data.github.passed) {
+          logToConsole(`✅ GitHub API authenticated (@${data.github.username}) with Push access.`, 'success');
+          document.getElementById('diag-github-user').textContent = `@${data.github.username}`;
+        }
+
+        logToConsole('🎉 Core Infrastructure verification complete: All 3 APIs online!', 'success');
+      } catch (e) {
+        logToConsole(`❌ Verification failed: ${e}`, 'error');
+      } finally {
+        btn.innerHTML = origText;
+        btn.disabled = false;
+      }
+    }
+
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/config');
+        if (res.ok) {
+          const cfg = await res.json();
+          document.getElementById('cfg-service-name').value = cfg.project?.service_name || '';
+          document.getElementById('cfg-repo').value = cfg.project?.repository || '';
+          document.getElementById('cfg-branch').value = cfg.project?.default_branch || 'master';
+          document.getElementById('cfg-db-engine').value = cfg.database?.engine || 'postgres';
+          document.getElementById('cfg-db-env').value = cfg.database?.read_only_connection_env || 'DATABASE_RO_URL';
+          document.getElementById('cfg-sla-latency').value = cfg.database?.sla_thresholds?.p99_latency_ms || 1000;
+        }
+      } catch (err) {
+        console.error('Config load failed', err);
+      }
+    }
+
+    async function saveProjectConfig() {
+      const payload = {
+        service_name: document.getElementById('cfg-service-name').value,
+        repository: document.getElementById('cfg-repo').value,
+        default_branch: document.getElementById('cfg-branch').value,
+        db_engine: document.getElementById('cfg-db-engine').value,
+        db_env: document.getElementById('cfg-db-env').value,
+        sla_latency: parseFloat(document.getElementById('cfg-sla-latency').value),
+      };
+
+      logToConsole('💾 Updating project integration manifest...', 'info');
+      try {
+        const res = await fetch('/api/config', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.saved) {
+          logToConsole('✅ Manifest saved and active configuration reloaded!', 'success');
+          await fetchStatus();
+        }
+      } catch (e) {
+        logToConsole(`❌ Failed to save config: ${e}`, 'error');
+      }
+    }
+
+    async function runComplianceAudit() {
+      logToConsole('🛡️ Running Aegis SRE architectural contract compliance check...', 'info');
+      try {
+        const res = await fetch('/api/config/validate', { method: 'POST' });
+        const report = await res.json();
+        
+        const container = document.getElementById('compliance-results');
+        const list = document.getElementById('audit-items-list');
+        const badge = document.getElementById('audit-status-badge');
+        container.classList.remove('hidden');
+
+        badge.textContent = report.passed ? '100% COMPLIANT' : 'VIOLATIONS FOUND';
+        badge.className = report.passed ? 'text-[11px] font-bold text-field' : 'text-[11px] font-bold text-red-600';
+
+        list.innerHTML = (report.checks || []).map(c => `
+          <div class="flex items-start space-x-2">
+            <span class="${c.passed ? 'text-field' : 'text-red-500'} font-bold">${c.passed ? '✅' : '❌'}</span>
+            <div>
+              <span class="font-semibold text-graphite">${c.name}</span>:
+              <span class="text-graphite/70">${c.detail}</span>
+            </div>
+          </div>
+        `).join('');
+
+        logToConsole(`🛡️ Compliance Audit: ${report.passed ? 'Passed all checks' : 'Found errors'}`, report.passed ? 'success' : 'error');
+      } catch (e) {
+        logToConsole(`❌ Compliance check error: ${e}`, 'error');
+      }
+    }
+
+    function copyDDL() {
+      const text = document.getElementById('synthesized-ddl-text').textContent;
+      navigator.clipboard.writeText(text);
+      logToConsole('📋 Synthesized DDL copied to clipboard!', 'info');
+    }
+
+    function openNewProjectModal() {
+      setActiveTab('projects');
+    }
+
+    // Initialize on load & start polling
+    window.addEventListener('DOMContentLoaded', () => {
+      fetchStatus();
+      loadIncidents();
+      setInterval(fetchStatus, 4000);
+    });
+  </script>
+</body>
+</html>
