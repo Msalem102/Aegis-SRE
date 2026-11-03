@@ -49,12 +49,13 @@ class ReadOnlyDatabaseInspector:
         self.row_count = row_count
         self._local_db_path: Optional[str] = None
 
-    def ensure_database_initialized(self, db_file_path: Optional[str]) -> Optional[str]:
+    def ensure_database_initialized(self, db_file_path: Optional[str], force_sqlite: bool = False) -> Optional[str]:
         """
         When running without a live PostgreSQL URL, ensures a real queryable local database exists.
-        When connected to live PostgreSQL (`self.is_postgres`), skips local SQLite seeding completely.
+        When connected to live PostgreSQL (`self.is_postgres`), skips local SQLite seeding completely
+        unless force_sqlite=True is requested as a fallback.
         """
-        if self.is_postgres:
+        if self.is_postgres and not force_sqlite:
             return None
 
         if not db_file_path:
@@ -73,7 +74,10 @@ class ReadOnlyDatabaseInspector:
         if self.schema_sql_path and os.path.exists(self.schema_sql_path):
             with open(self.schema_sql_path, "r", encoding="utf-8") as f:
                 raw_schema = f.read()
-            adapted_schema = re.sub(r"\bBIGSERIAL\s+PRIMARY\s+KEY\b", "INTEGER PRIMARY KEY AUTOINCREMENT", raw_schema, flags=re.I)
+            adapted_schema = re.sub(r"DO\s+\$do\$.*?\$do\$;", "", raw_schema, flags=re.S | re.I)
+            adapted_schema = re.sub(r"DROP\s+TABLE[^;]+CASCADE;", "", adapted_schema, flags=re.I)
+            adapted_schema = re.sub(r"\bCASCADE\b", "", adapted_schema, flags=re.I)
+            adapted_schema = re.sub(r"\bBIGSERIAL\s+PRIMARY\s+KEY\b", "INTEGER PRIMARY KEY AUTOINCREMENT", adapted_schema, flags=re.I)
             adapted_schema = re.sub(r"\bSERIAL\s+PRIMARY\s+KEY\b", "INTEGER PRIMARY KEY AUTOINCREMENT", adapted_schema, flags=re.I)
             adapted_schema = re.sub(r"\bTIMESTAMP\s+WITH\s+TIME\s+ZONE\b", "TEXT", adapted_schema, flags=re.I)
             adapted_schema = re.sub(r"\bTIMESTAMPTZ\b", "TEXT", adapted_schema, flags=re.I)
@@ -340,7 +344,29 @@ class ReadOnlyDatabaseInspector:
         - Live EXPLAIN execution plan and baseline query execution latency
         """
         if self.is_postgres:
-            return self._inspect_postgres_readonly(offending_query, sample_params)
+            try:
+                return self._inspect_postgres_readonly(offending_query, sample_params)
+            except Exception as pg_err:
+                err_s = str(pg_err).lower()
+                if "connection refused" in err_s or "could not connect to server" in err_s or "failed: connection" in err_s:
+                    print(f"   [Notice] Target PostgreSQL server offline ({pg_err}). Falling back to schema inspection.")
+                    if not self.schema_sql_path:
+                        for cand_dir in [os.getcwd(), os.path.dirname(os.getcwd()), "C:/Users/ahmed/Desktop/mockStore"]:
+                            for f in ["init.sql", "schema.sql", "db/schema.sql"]:
+                                cp = os.path.join(cand_dir, f)
+                                if os.path.exists(cp):
+                                    self.schema_sql_path = cp
+                                    break
+                            if self.schema_sql_path:
+                                break
+                    if self.schema_sql_path and os.path.exists(self.schema_sql_path):
+                        temp_db = os.path.join(tempfile.gettempdir(), f"aegis_fallback_{os.getpid()}.db")
+                        self.ensure_database_initialized(temp_db, force_sqlite=True)
+                        return self._inspect_sqlite_readonly(offending_query, sample_params)
+                raise
+        return self._inspect_sqlite_readonly(offending_query, sample_params)
+
+    def _inspect_sqlite_readonly(self, offending_query: str, sample_params: Optional[List[Any]] = None) -> Dict[str, Any]:
 
         if not self._local_db_path:
             raise RuntimeError("Database not initialized for read-only inspection.")

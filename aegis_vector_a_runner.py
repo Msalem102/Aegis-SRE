@@ -79,6 +79,12 @@ def run_vector_a_remediation(
         if (not raw_schema_src or raw_schema_src.strip().lower() in LIVE_SCHEMA_MODES)
         else AegisConfigLoader.resolve_path(base_dir, raw_schema_src)
     )
+    if not resolved_schema:
+        for cand in ["init.sql", "schema.sql", "db/schema.sql"]:
+            cand_p = os.path.join(base_dir, cand)
+            if os.path.isfile(cand_p):
+                resolved_schema = cand_p
+                break
     resolved_live_db = AegisConfigLoader.resolve_path(base_dir, raw_live_db)
     max_retries = max_retries or (db_cfg.max_healing_retries if db_cfg else 3)
     raw_conn = (db_cfg.connection_url or db_cfg.read_only_connection_env) if db_cfg else "DATABASE_RO_URL"
@@ -186,8 +192,8 @@ def run_vector_a_remediation(
     # -------------------------------------------------------------
     muse_db = MuseDBClient()
     db_sandbox = DatabaseSandbox(
-        source_db_path=db_path,
-        schema_sql_path=resolved_schema,
+        source_db_path=db_path or inspector._local_db_path,
+        schema_sql_path=resolved_schema or inspector.schema_sql_path,
         app_name=manifest.sandbox.app_name,
         timeout_seconds=max(manifest.sandbox.timeout_seconds, 90),
         min_speedup_percent=min_speedup,
