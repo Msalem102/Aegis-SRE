@@ -316,6 +316,10 @@ def create_webhook_app(
                         "path": f_path,
                         "service_name": m.project.service_name,
                         "repository": m.project.repository,
+                        "branch": m.project.default_branch,
+                        "db_engine": m.database.engine if m.database else "postgres",
+                        "sla_latency": m.database.sla_thresholds.p99_latency_ms if (m.database and m.database.sla_thresholds) else 1000.0,
+                        "upstream_count": len(m.upstream_apis),
                         "is_active": (f == os.path.basename(config_path))
                     })
                 except Exception:
@@ -332,8 +336,87 @@ def create_webhook_app(
             manifest = AegisConfigLoader.load_or_default(config_path)
             res_code = AegisConfigLoader.resolve_path(config_dir, manifest.project.code_dir) if manifest.project.code_dir else None
             base_dir = res_code if (res_code and os.path.isdir(res_code)) else config_dir
-            return {"status": "SUCCESS", "active_config": config_path, "service": manifest.project.service_name}
+            return {
+                "status": "SUCCESS",
+                "active_config": os.path.basename(config_path),
+                "service": manifest.project.service_name,
+                "repository": manifest.project.repository,
+                "branch": manifest.project.default_branch,
+                "watchdog_interval": manifest.observability.watchdog_interval_seconds if manifest.observability else 60,
+                "sla_latency": manifest.database.sla_thresholds.p99_latency_ms if (manifest.database and manifest.database.sla_thresholds) else 1000.0,
+                "db_engine": manifest.database.engine if manifest.database else "postgres"
+            }
         raise HTTPException(status_code=404, detail="Config manifest not found")
+
+    @app.post("/api/services/create")
+    def create_service(payload: Dict[str, Any]):
+        nonlocal config_path, manifest, base_dir
+        raw_name = str(payload.get("service_name") or "new-app").strip().lower().replace(" ", "-")
+        service_name = "".join([c for c in raw_name if c.isalnum() or c in ("-", "_")]) or "new-app"
+        repository = str(payload.get("repository") or f"org/{service_name}").strip()
+        default_branch = str(payload.get("default_branch") or "main").strip()
+        db_engine = str(payload.get("db_engine") or "postgres").strip()
+        db_env = str(payload.get("db_env") or "DATABASE_RO_URL").strip()
+        sla_latency = float(payload.get("sla_latency") or 1000.0)
+        watchdog_interval = int(payload.get("watchdog_interval") or 60)
+        code_dir = str(payload.get("code_dir") or "").strip()
+
+        filename = f"{service_name}_aegis.yaml"
+        target_file = os.path.join(config_dir, filename)
+
+        starter_dict = {
+            "version": "1.0",
+            "project": {
+                "service_name": service_name,
+                "repository": repository,
+                "default_branch": default_branch,
+                "code_dir": code_dir if code_dir else None,
+                "read_only_source": True
+            },
+            "observability": {
+                "provider": "direct",
+                "watchdog_interval_seconds": watchdog_interval
+            },
+            "database": {
+                "engine": db_engine,
+                "read_only_connection_env": db_env,
+                "require_read_only_mode": True,
+                "schema_path": "auto",
+                "telemetry_source": "auto",
+                "migration_output_dir": "migrations",
+                "max_healing_retries": 3,
+                "sla_thresholds": {
+                    "p99_latency_ms": sla_latency,
+                    "max_cpu_percent": 80.0,
+                    "min_sandbox_speedup_percent": 80.0
+                }
+            },
+            "upstream_apis": [],
+            "sandbox": {
+                "provider": "modal",
+                "app_name": "aegis-sre",
+                "timeout_seconds": 120
+            }
+        }
+
+        import yaml
+        with open(target_file, "w", encoding="utf-8") as f:
+            yaml.dump(starter_dict, f, default_flow_style=False)
+
+        # Immediately switch active context to newly created service
+        config_path = target_file
+        manifest = AegisConfigLoader.load_or_default(config_path)
+        res_code = AegisConfigLoader.resolve_path(config_dir, manifest.project.code_dir) if manifest.project.code_dir else None
+        base_dir = res_code if (res_code and os.path.isdir(res_code)) else config_dir
+
+        return {
+            "status": "CREATED",
+            "filename": filename,
+            "service": service_name,
+            "repository": repository,
+            "branch": default_branch,
+            "sla_latency": sla_latency
+        }
 
     @app.get("/api/config")
     def get_config():

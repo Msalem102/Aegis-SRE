@@ -53,142 +53,135 @@
       height: 6px;
     }
     .custom-scrollbar::-webkit-scrollbar-track {
-      background: rgba(24, 35, 33, 0.05);
+      background: rgba(24, 35, 33, 0.04);
     }
     .custom-scrollbar::-webkit-scrollbar-thumb {
       background: rgba(24, 35, 33, 0.2);
-      border-radius: 3px;
+      border-radius: 4px;
     }
     .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: rgba(24, 35, 33, 0.4);
-    }
-    @keyframes pulse-slow {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.7; transform: scale(1.05); }
-    }
-    .pulse-subtle {
-      animation: pulse-slow 3s infinite ease-in-out;
+      background: rgba(24, 35, 33, 0.35);
     }
   </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-solar/30">
 
   <!-- ================= TOP NAVIGATION ================= -->
-  <header class="bg-graphite text-daylight border-b border-white/10 sticky top-0 z-50 shadow-md">
+  <header class="bg-graphite text-daylight border-b border-white/10 sticky top-0 z-50 shadow-sm">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       
       <!-- Brand & Monogram -->
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-lg bg-daylight/10 border border-white/15 p-1.5 flex items-center justify-center overflow-hidden">
+      <div class="flex items-center space-x-3.5">
+        <div class="w-10 h-10 rounded-xl bg-white/10 border border-white/15 p-1.5 flex items-center justify-center overflow-hidden shadow-inner">
           <img src="/static/logo.png" alt="Aegis Logo" class="w-full h-full object-contain filter invert">
         </div>
-        <div>
-          <div class="flex items-center space-x-2">
-            <span class="font-bold text-lg tracking-tight text-white">AEGIS</span>
-            <span class="text-xs uppercase tracking-widest font-extrabold px-1.5 py-0.5 rounded bg-solar text-graphite">SRE</span>
-          </div>
-          <p class="text-[11px] text-white/60 tracking-wide font-normal">Autonomous Site Reliability Engineering & Auto-Remediation</p>
+        <div class="flex items-center space-x-2">
+          <span class="font-extrabold text-lg tracking-tight text-white">AEGIS</span>
+          <span class="text-[11px] uppercase tracking-widest font-extrabold px-2 py-0.5 rounded bg-solar text-graphite shadow-sm">SRE</span>
         </div>
       </div>
 
-      <!-- Center: Service Selector & Status Pill -->
-      <div class="hidden md:flex items-center space-x-3">
-        <div class="flex items-center space-x-2 bg-white/5 border border-white/10 rounded-full px-3.5 py-1.5">
+      <!-- Center: Modular App Switcher -->
+      <div class="flex items-center space-x-3">
+        <div class="hidden md:flex items-center space-x-2 bg-white/5 border border-white/10 rounded-xl px-3.5 py-1.5">
           <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" id="watchdog-pulse"></span>
-          <span class="text-xs font-semibold text-white/80" id="monitored-service-label">cupertino-coffee-store</span>
-          <span class="text-[10px] bg-white/10 text-white/70 px-2 py-0.5 rounded-full font-mono" id="monitored-repo-label">ahmedharib/mockStore</span>
+          <span class="text-xs font-semibold text-white/90" id="monitored-service-label">cupertino-coffee-store</span>
+          <span class="text-[10px] bg-white/10 text-white/70 px-2 py-0.5 rounded-md font-mono" id="monitored-repo-label">ahmedharib/mockStore</span>
         </div>
 
-        <select id="service-switcher" onchange="switchService(this.value)" class="bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-solar cursor-pointer transition">
-          <option value="mockstore_aegis.yaml" class="bg-graphite text-white">mockstore_aegis.yaml (Active)</option>
-          <option value="aegis.yaml" class="bg-graphite text-white">aegis.yaml (Root Manifest)</option>
-        </select>
+        <div class="relative">
+          <select id="service-switcher" onchange="switchService(this.value)" class="bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-semibold rounded-xl px-3 py-1.5 pr-8 focus:outline-none focus:ring-1 focus:ring-solar cursor-pointer transition">
+            <option value="mockstore_aegis.yaml" class="bg-graphite text-white">cupertino-coffee-store</option>
+            <option value="logistics_service_aegis.yaml" class="bg-graphite text-white">logistics-delivery-service</option>
+            <option value="aegis.yaml" class="bg-graphite text-white">aegis.yaml (Base)</option>
+          </select>
+        </div>
       </div>
 
       <!-- Right: Action Buttons -->
-      <div class="flex items-center space-x-2.5">
-        <button onclick="triggerVerification()" id="btn-verify-top" class="flex items-center space-x-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg border border-white/15 transition">
+      <div class="flex items-center space-x-3">
+        <button onclick="triggerVerification()" id="btn-verify-top" class="hidden sm:flex items-center space-x-1.5 text-xs font-semibold bg-white/10 hover:bg-white/20 text-white px-3.5 py-1.5 rounded-xl border border-white/15 transition">
           <svg class="w-3.5 h-3.5 text-solar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-          <span>Verify APIs</span>
+          <span>Verify Core APIs</span>
         </button>
 
-        <button onclick="openNewProjectModal()" class="flex items-center space-x-1.5 text-xs font-bold bg-solar hover:bg-amber-400 text-graphite px-3.5 py-1.5 rounded-lg shadow-sm transition">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-          <span>Setup Project</span>
+        <button onclick="openConnectAppModal()" class="flex items-center space-x-1.5 text-xs font-bold bg-solar hover:bg-amber-400 text-graphite px-4 py-2 rounded-xl shadow-sm transition active:scale-95">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          <span>Connect App</span>
         </button>
       </div>
 
     </div>
   </header>
 
-  <!-- ================= SUBHEADER / KPI STATS BAR ================= -->
-  <section class="bg-white border-b border-graphite/10 py-4 shadow-sm">
+  <!-- ================= KPI METRICS BAR ================= -->
+  <section class="bg-white border-b border-graphite/10 py-5">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
         
-        <!-- KPI 1: Live SLA Status -->
-        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
-          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
-            <span>Query SLA Target</span>
-            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field">
-              P99 &lt; 1000ms
+        <!-- KPI 1: Live Query Latency -->
+        <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-graphite/20 transition">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-semibold uppercase tracking-wider">
+            <span>Query SLA</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field" id="kpi-sla-target-pill">
+              Target &lt; 1000ms
             </span>
           </div>
-          <div class="mt-2 flex items-baseline space-x-2">
-            <span class="text-2xl font-extrabold text-graphite tabular" id="kpi-live-latency">6.82 ms</span>
+          <div class="my-2.5 flex items-baseline space-x-2">
+            <span class="text-3xl font-extrabold text-graphite tabular" id="kpi-live-latency">6.82 ms</span>
             <span class="text-xs font-bold text-field flex items-center">
-              <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+              <svg class="w-3.5 h-3.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
               -97.2%
             </span>
           </div>
-          <span class="text-[11px] text-graphite/50 mt-1">Direct RO PostgreSQL Telemetry</span>
+          <div class="text-[11px] text-graphite/50 font-medium">PostgreSQL Read-Only Telemetry</div>
         </div>
 
         <!-- KPI 2: Direct Watchdog State -->
-        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
-          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
-            <span>Direct DB Watchdog</span>
-            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field" id="watchdog-state-pill">
+        <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-graphite/20 transition">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-semibold uppercase tracking-wider">
+            <span>Telemetry Watchdog</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field" id="watchdog-state-pill">
               ACTIVE (RO)
             </span>
           </div>
-          <div class="mt-2 flex items-baseline space-x-1.5">
-            <span class="text-xl font-bold text-graphite tabular" id="kpi-tuples-read">+0 tuples</span>
+          <div class="my-2.5 flex items-baseline space-x-2">
+            <span class="text-2xl font-extrabold text-graphite tabular" id="kpi-tuples-read">+0 tuples</span>
           </div>
-          <div class="flex items-center justify-between text-[11px] text-graphite/50 mt-1">
+          <div class="flex items-center justify-between text-[11px] text-graphite/50 font-medium">
             <span id="kpi-watchdog-poll-interval">Polling: 60s</span>
-            <button onclick="triggerManualScan()" class="text-field font-semibold hover:underline">Scan Now</button>
+            <button onclick="triggerManualScan()" class="text-field font-bold hover:underline">Scan Now</button>
           </div>
         </div>
 
-        <!-- KPI 3: Closed-Loop Auto-Remediations -->
-        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
-          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
-            <span>Incidents Resolved</span>
-            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-solar/20 text-amber-800">
-              100% Pass Gate
+        <!-- KPI 3: Resolved Incidents -->
+        <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-graphite/20 transition">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-semibold uppercase tracking-wider">
+            <span>Remediations</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-solar/20 text-amber-900">
+              100% Verified
             </span>
           </div>
-          <div class="mt-2 flex items-baseline space-x-2">
-            <span class="text-2xl font-extrabold text-graphite tabular" id="kpi-incidents-count">2</span>
-            <span class="text-xs text-graphite/60">Autonomous PRs</span>
+          <div class="my-2.5 flex items-baseline space-x-2">
+            <span class="text-3xl font-extrabold text-graphite tabular" id="kpi-incidents-count">2</span>
+            <span class="text-xs font-semibold text-graphite/60">Autonomous PRs</span>
           </div>
-          <span class="text-[11px] text-graphite/50 mt-1">Vector A (DB) & Vector B (API)</span>
+          <div class="text-[11px] text-graphite/50 font-medium">Vector A (DB) & Vector B (API)</div>
         </div>
 
-        <!-- KPI 4: Task Accounting & SRE ROI -->
-        <div class="bg-daylight/60 border border-graphite/10 rounded-xl p-3.5 flex flex-col justify-between">
-          <div class="flex items-center justify-between text-xs text-graphite/60 font-medium">
-            <span>Engineering Cost Saved</span>
-            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-signal/15 text-signal font-mono">
+        <!-- KPI 4: Meta Muse Spark Engine -->
+        <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between hover:border-graphite/20 transition">
+          <div class="flex items-center justify-between text-xs text-graphite/60 font-semibold uppercase tracking-wider">
+            <span>Reasoning Engine</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-signal/15 text-signal font-mono">
               muse-spark-1.2
             </span>
           </div>
-          <div class="mt-2 flex items-baseline space-x-2">
-            <span class="text-2xl font-extrabold text-field tabular" id="kpi-cost-saved">$180.00</span>
-            <span class="text-xs text-graphite/60">Saved</span>
+          <div class="my-2.5 flex items-baseline space-x-2">
+            <span class="text-3xl font-extrabold text-signal tabular" id="kpi-meta-latency">1.52 s</span>
+            <span class="text-xs text-graphite/60">Synthesis</span>
           </div>
-          <span class="text-[11px] text-graphite/50 mt-1">LLM Compute Cost: $0.024</span>
+          <div class="text-[11px] text-graphite/50 font-medium">Modal Micro-VM Sandboxed</div>
         </div>
 
       </div>
@@ -196,126 +189,122 @@
   </section>
 
   <!-- ================= MAIN TAB NAVIGATION ================= -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
     
-    <!-- Tab Controls -->
-    <div class="flex items-center justify-between border-b border-graphite/15 pb-3 mb-6">
-      <nav class="flex space-x-2" aria-label="Tabs">
-        <button onclick="setActiveTab('operations')" id="tab-btn-operations" class="tab-btn px-4 py-2 rounded-lg text-xs font-bold transition flex items-center space-x-2 bg-graphite text-white shadow-sm">
+    <!-- Tab Navigation Controls -->
+    <div class="flex items-center justify-between border-b border-graphite/10 pb-4">
+      <nav class="flex flex-wrap gap-2" aria-label="Tabs">
+        <button onclick="setActiveTab('operations')" id="tab-btn-operations" class="tab-btn px-5 py-2.5 rounded-xl text-xs font-bold transition flex items-center space-x-2 bg-graphite text-white shadow-sm">
           <svg class="w-4 h-4 text-solar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          <span>Live Operations & Visualizer</span>
+          <span>Live Operations</span>
         </button>
 
-        <button onclick="setActiveTab('projects')" id="tab-btn-projects" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white/60 transition flex items-center space-x-2">
+        <button onclick="setActiveTab('projects')" id="tab-btn-projects" class="tab-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white transition flex items-center space-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-          <span>Services & Onboarding</span>
+          <span>Connected Apps</span>
         </button>
 
-        <button onclick="setActiveTab('history')" id="tab-btn-history" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white/60 transition flex items-center space-x-2">
+        <button onclick="setActiveTab('history')" id="tab-btn-history" class="tab-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white transition flex items-center space-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <span>Incident Post-Mortems</span>
-          <span class="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-graphite/10 text-graphite" id="history-badge">2</span>
+          <span>Remediation History</span>
+          <span class="ml-1 px-2 py-0.5 rounded-full text-[10px] bg-graphite/10 text-graphite font-bold" id="history-badge">2</span>
         </button>
 
-        <button onclick="setActiveTab('diagnostics')" id="tab-btn-diagnostics" class="tab-btn px-4 py-2 rounded-lg text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white/60 transition flex items-center space-x-2">
+        <button onclick="setActiveTab('diagnostics')" id="tab-btn-diagnostics" class="tab-btn px-5 py-2.5 rounded-xl text-xs font-semibold text-graphite/70 hover:text-graphite hover:bg-white transition flex items-center space-x-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
-          <span>Core Infrastructure</span>
+          <span>Infrastructure Health</span>
         </button>
       </nav>
 
-      <!-- Live Watchdog Poller Timestamp -->
-      <div class="hidden sm:flex items-center space-x-2 text-xs text-graphite/60">
-        <span class="w-2 h-2 rounded-full bg-field"></span>
-        <span>Watchdog:</span>
-        <span class="font-mono text-graphite font-semibold" id="last-heartbeat-time">Connected</span>
+      <!-- Active Service Indicator -->
+      <div class="hidden md:flex items-center space-x-2 text-xs font-medium text-graphite/60">
+        <span>Active Target:</span>
+        <span class="font-bold text-graphite" id="active-target-summary-label">cupertino-coffee-store</span>
       </div>
     </div>
 
     <!-- ================= TAB 1: LIVE OPERATIONS & VISUALIZER ================= -->
-    <section id="tab-content-operations" class="tab-pane space-y-6">
+    <section id="tab-content-operations" class="tab-pane space-y-8">
 
-      <!-- Action Trigger Bar -->
-      <div class="bg-white border border-graphite/10 rounded-2xl p-5 shadow-sm">
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <!-- Action Trigger Controls -->
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 sm:p-7 shadow-sm">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-5">
           <div>
-            <h2 class="text-base font-bold text-graphite flex items-center space-x-2">
-              <span>On-Demand Autonomous SRE Controls</span>
-              <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-solar/20 text-amber-900 uppercase">Live Sandbox Gate</span>
+            <h2 class="text-base font-extrabold text-graphite tracking-tight flex items-center space-x-2">
+              <span>On-Demand Autonomous Controls</span>
+              <span class="text-[10px] font-extrabold px-2 py-0.5 rounded bg-solar/20 text-amber-900 uppercase">Live Modal Gate</span>
             </h2>
-            <p class="text-xs text-graphite/60 mt-0.5">Trigger immediate closed-loop diagnosis, Meta Muse Spark synthesis, Modal micro-VM verification, and atomic GitHub PR creation.</p>
+            <p class="text-xs text-graphite/60 mt-1">Dispatch closed-loop diagnosis, Meta Muse Spark patch synthesis, and atomic Pull Request creation.</p>
           </div>
 
-          <div class="flex flex-wrap items-center gap-2.5">
-            <!-- Trigger Vector A -->
-            <button onclick="triggerRemediation('a')" id="btn-trigger-a" class="flex items-center space-x-2 bg-graphite hover:bg-graphite/90 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95">
+          <div class="flex flex-wrap items-center gap-3">
+            <button onclick="triggerRemediation('a')" id="btn-trigger-a" class="flex items-center space-x-2 bg-graphite hover:bg-graphite/90 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition active:scale-95">
               <span class="w-2 h-2 rounded-full bg-solar"></span>
-              <span>Trigger Vector A (DB Index)</span>
+              <span>⚡ Fix DB Query (Vector A)</span>
             </button>
 
-            <!-- Trigger Vector B -->
-            <button onclick="triggerRemediation('b')" id="btn-trigger-b" class="flex items-center space-x-2 bg-field hover:bg-field/90 text-white px-4 py-2.5 rounded-xl text-xs font-bold shadow transition active:scale-95">
+            <button onclick="triggerRemediation('b')" id="btn-trigger-b" class="flex items-center space-x-2 bg-field hover:bg-field/90 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition active:scale-95">
               <span class="w-2 h-2 rounded-full bg-emerald-300"></span>
-              <span>Trigger Vector B (API Drift)</span>
+              <span>🔄 Fix API Contract (Vector B)</span>
             </button>
 
-            <!-- Direct Watchdog Poll -->
-            <button onclick="triggerManualScan()" id="btn-trigger-scan" class="flex items-center space-x-2 bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3.5 py-2.5 rounded-xl text-xs font-semibold shadow-sm transition">
+            <button onclick="triggerManualScan()" id="btn-trigger-scan" class="flex items-center space-x-2 bg-white hover:bg-daylight text-graphite border border-graphite/20 px-4 py-2.5 rounded-xl text-xs font-bold shadow-sm transition">
               <svg class="w-3.5 h-3.5 text-signal" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              <span>Watchdog Poll</span>
+              <span>Scan Database</span>
             </button>
           </div>
         </div>
       </div>
 
-      <!-- Live Before & After Visual Remediation Card -->
-      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm space-y-6">
+      <!-- Live Before & After Latency Comparison Card -->
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 sm:p-8 shadow-sm space-y-7">
         
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-graphite/10 pb-4 gap-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-graphite/10 pb-5 gap-3">
           <div>
-            <div class="flex items-center space-x-2">
-              <span class="text-xs font-extrabold uppercase tracking-widest px-2 py-0.5 rounded bg-solar text-graphite" id="active-incident-tag">INC-20261102-PG-SEQSCAN</span>
-              <h3 class="text-lg font-bold text-graphite" id="active-incident-title">Autonomous Database Sequential Scan Remediation (Vector A)</h3>
+            <div class="flex items-center space-x-2.5">
+              <span class="text-xs font-extrabold uppercase tracking-wider px-2.5 py-0.5 rounded bg-solar text-graphite" id="active-incident-tag">INC-20261102-PG-SEQSCAN</span>
+              <h3 class="text-lg font-bold text-graphite" id="active-incident-title">Database Sequential Scan Auto-Remediation</h3>
             </div>
-            <p class="text-xs text-graphite/60 mt-1">Target Service: <span class="font-semibold text-graphite">cupertino-coffee-store</span> | Monitored Query: <code class="bg-daylight px-1.5 py-0.5 rounded font-mono text-[11px] text-graphite">SELECT o.order_id, i.product_id FROM orders o JOIN order_items i...</code></p>
+            <p class="text-xs text-graphite/60 mt-1.5">Monitored Target: <span class="font-bold text-graphite" id="visualizer-service-name">cupertino-coffee-store</span> | Monitored Query: <code class="bg-daylight px-2 py-0.5 rounded font-mono text-[11px] text-graphite">SELECT o.order_id, i.product_id FROM orders o JOIN order_items i...</code></p>
           </div>
 
           <div class="flex items-center space-x-2">
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-field/15 text-field">
+            <span class="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-bold bg-field/15 text-field">
               <svg class="w-3.5 h-3.5 mr-1 text-field" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-              Deterministic Sandbox Gate: PASSED
+              Modal Sandbox Gate: PASSED
             </span>
           </div>
         </div>
 
         <!-- Latency Delta Comparison (Interactive Visual Bars) -->
         <div class="space-y-4">
-          <div class="flex items-center justify-between text-xs font-semibold text-graphite/70">
-            <span>Query Latency Before vs. After Ephemeral Sandbox Benchmark</span>
-            <span class="text-field font-bold text-sm tabular" id="speedup-label">-97.2% Faster</span>
+          <div class="flex items-center justify-between text-xs font-bold text-graphite/70 uppercase tracking-wide">
+            <span>Query Execution Latency (Production vs. Remediated Micro-VM)</span>
+            <span class="text-field font-extrabold text-sm tabular" id="speedup-label">-97.2% Faster</span>
           </div>
 
-          <div class="space-y-3 bg-daylight/50 border border-graphite/10 rounded-xl p-4">
+          <div class="space-y-4 bg-daylight/50 border border-graphite/10 rounded-2xl p-5">
             
-            <!-- Before Bar -->
+            <!-- Baseline Before Bar -->
             <div>
-              <div class="flex justify-between text-xs mb-1 font-medium">
-                <span class="text-amber-800 flex items-center">
-                  <span class="w-2 h-2 rounded-full bg-solar mr-1.5"></span>
+              <div class="flex justify-between text-xs mb-1.5 font-semibold">
+                <span class="text-amber-900 flex items-center">
+                  <span class="w-2.5 h-2.5 rounded-full bg-solar mr-2"></span>
                   Baseline Production Latency (Unindexed Sequential Scan)
                 </span>
-                <span class="font-bold text-graphite tabular" id="val-before-latency">242.87 ms</span>
+                <span class="font-extrabold text-graphite tabular" id="val-before-latency">242.87 ms</span>
               </div>
               <div class="w-full bg-graphite/10 rounded-full h-4 overflow-hidden p-0.5">
                 <div class="bg-gradient-to-r from-solar to-amber-500 h-3 rounded-full transition-all duration-1000 ease-out shadow-sm" style="width: 100%;" id="bar-before-latency"></div>
               </div>
             </div>
 
-            <!-- After Bar -->
+            <!-- Remediated After Bar -->
             <div>
-              <div class="flex justify-between text-xs mb-1 font-medium">
+              <div class="flex justify-between text-xs mb-1.5 font-semibold">
                 <span class="text-field flex items-center">
-                  <span class="w-2 h-2 rounded-full bg-field mr-1.5"></span>
-                  Modal Cloud Micro-VM Latency (Verified Candidate Patch)
+                  <span class="w-2.5 h-2.5 rounded-full bg-field mr-2"></span>
+                  Modal Cloud Micro-VM Latency (Verified Zero-Downtime Index)
                 </span>
                 <span class="font-extrabold text-field tabular" id="val-after-latency">6.94 ms</span>
               </div>
@@ -328,65 +317,61 @@
         </div>
 
         <!-- EXPLAIN Plan Side-by-Side Node Transformation -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
           
           <!-- Before Plan -->
-          <div class="border border-amber-200 bg-amber-50/50 rounded-xl p-4 space-y-2.5">
+          <div class="border border-amber-200 bg-amber-50/40 rounded-2xl p-5 space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center">
+              <span class="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center">
                 <svg class="w-4 h-4 mr-1.5 text-solar" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                PostgreSQL Execution Plan (Before)
+                Execution Plan (Before)
               </span>
-              <span class="text-[10px] bg-solar/20 text-amber-900 font-semibold px-2 py-0.5 rounded">Severe Contention</span>
+              <span class="text-[10px] bg-solar/20 text-amber-900 font-bold px-2 py-0.5 rounded">69,405 Rows Read</span>
             </div>
 
-            <div class="space-y-1.5 font-mono text-[11px] text-graphite/80 bg-white border border-amber-200/60 rounded-lg p-3">
-              <div class="text-red-700 font-semibold">❌ Hash Join (cost=1403.13, actual_rows=40)</div>
-              <div class="pl-4 text-red-600">└─ Seq Scan on order_items (cost=771.0, rows=50,000)</div>
-              <div class="pl-4 text-red-600">└─ Seq Scan on orders (cost=500.62, rows=19,405)</div>
-              <div class="pl-8 text-graphite/50 text-[10px]">Filter: (customer_id = 639) — No Index Found</div>
+            <div class="space-y-1.5 font-mono text-[11px] text-graphite/80 bg-white border border-amber-200/60 rounded-xl p-3.5 leading-relaxed">
+              <div class="text-red-700 font-bold">❌ Hash Join (cost=1403.13)</div>
+              <div class="pl-4 text-red-600">└─ Seq Scan on order_items (50,000 rows)</div>
+              <div class="pl-4 text-red-600">└─ Seq Scan on orders (19,405 rows)</div>
             </div>
-            <p class="text-[11px] text-graphite/60">Planner forced to sequentially read 69,405 rows per customer checkout query.</p>
           </div>
 
           <!-- After Plan -->
-          <div class="border border-emerald-200 bg-emerald-50/50 rounded-xl p-4 space-y-2.5">
+          <div class="border border-emerald-200 bg-emerald-50/40 rounded-2xl p-5 space-y-3">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-bold text-field uppercase tracking-wide flex items-center">
+              <span class="text-xs font-bold text-field uppercase tracking-wider flex items-center">
                 <svg class="w-4 h-4 mr-1.5 text-field" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                Modal Micro-VM Plan (Remediated)
+                Remediated Plan (After)
               </span>
-              <span class="text-[10px] bg-field/15 text-field font-semibold px-2 py-0.5 rounded">Zero Table Lock</span>
+              <span class="text-[10px] bg-field/15 text-field font-bold px-2 py-0.5 rounded">Zero Table Lock</span>
             </div>
 
-            <div class="space-y-1.5 font-mono text-[11px] text-graphite/80 bg-white border border-emerald-200/60 rounded-lg p-3">
-              <div class="text-field font-semibold">✅ Nested Loop Index Lookup (cost=14.20, rows=40)</div>
-              <div class="pl-4 text-field">└─ Index Scan using idx_orders_customer_id (cost=8.45, rows=24)</div>
-              <div class="pl-4 text-field">└─ Index Scan using idx_order_items_order_id (cost=5.75, rows=40)</div>
-              <div class="pl-8 text-field/70 text-[10px]">Index Cond: (customer_id = 639) — Fast Index Lookup</div>
+            <div class="space-y-1.5 font-mono text-[11px] text-graphite/80 bg-white border border-emerald-200/60 rounded-xl p-3.5 leading-relaxed">
+              <div class="text-field font-bold">✅ Nested Loop Index Lookup (cost=14.20)</div>
+              <div class="pl-4 text-field">└─ Index Scan using idx_orders_customer_id</div>
+              <div class="pl-4 text-field">└─ Index Scan using idx_order_items_order_id</div>
             </div>
-            <p class="text-[11px] text-graphite/60">Zero table locks detected; execution time plummeted from 242.87ms to 6.94ms.</p>
           </div>
 
         </div>
 
-        <!-- Synthesized Patch & Safety Details -->
-        <div class="bg-daylight/70 border border-graphite/10 rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <!-- Synthesized Migration & PR Delivery Bar -->
+        <div class="bg-daylight/70 border border-graphite/10 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div class="space-y-1">
             <div class="flex items-center space-x-2">
-              <span class="text-xs font-bold text-graphite">Synthesized DDL Migration:</span>
+              <span class="text-xs font-bold text-graphite">Synthesized Migration DDL:</span>
               <code class="bg-white border border-graphite/10 text-field font-bold px-2 py-0.5 rounded text-xs font-mono" id="synthesized-ddl-text">CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_orders_customer_id ON orders(customer_id);</code>
             </div>
-            <p class="text-[11px] text-graphite/60">Safety Gate Verified: CONCURRENTLY mandated, lock_timeout='5s', zero DROP/TRUNCATE hazards.</p>
+            <p class="text-[11px] text-graphite/60">Verified with CONCURRENTLY clause, lock_timeout='5s', zero schema locks.</p>
           </div>
 
-          <div class="flex items-center space-x-2">
-            <a href="https://github.com/ahmedharib/mockStore/pulls" target="_blank" id="btn-view-pr" class="inline-flex items-center space-x-1.5 bg-graphite hover:bg-black text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition">
+          <div class="flex items-center space-x-2.5">
+            <a href="https://github.com/ahmedharib/mockStore/pulls" target="_blank" id="btn-view-pr" class="inline-flex items-center space-x-1.5 bg-graphite hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition">
               <svg class="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z"/></svg>
-              <span id="pr-link-text">Inspect Live PR #12</span>
+              <span id="pr-link-text">Inspect GitHub PR</span>
             </a>
 
-            <button onclick="copyDDL()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3 py-2 rounded-xl text-xs font-semibold shadow-sm transition">
+            <button onclick="copyDDL()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition">
               Copy DDL
             </button>
           </div>
@@ -413,37 +398,58 @@
           </div>
         </div>
 
-        <div id="live-console" class="font-mono text-xs text-white/80 bg-black/40 rounded-xl p-4 h-64 overflow-y-auto space-y-1.5 custom-scrollbar leading-relaxed">
+        <div id="live-console" class="font-mono text-xs text-white/80 bg-black/40 rounded-xl p-4 h-56 overflow-y-auto space-y-1.5 custom-scrollbar leading-relaxed">
           <div class="text-white/50">📡 [Aegis Direct DB Watchdog] Monitoring PostgreSQL read-only telemetry every 60s...</div>
-          <div class="text-emerald-400">✅ [Core Verifier] Meta Model API (muse-spark-1.2), Modal Cloud, and GitHub PR delivery confirmed ready.</div>
-          <div class="text-white/70">📡 [Aegis Direct DB Watchdog] Baseline initialized for 'cupertino-coffee-store'. Active monitoring engaged.</div>
-          <div class="text-solar">⚡ [Aegis Direct DB Watchdog] Active unindexed sequential scan surge detected on 'cupertino-coffee-store' (+9,450,000 tuples read)!</div>
-          <div class="text-white">🚨 [Aegis SRE] Activated: Meta Muse Spark synthesized zero-downtime CONCURRENTLY index in 9.32s.</div>
-          <div class="text-signal">☁️ [Modal Cloud DB Sandbox] Provisioned ephemeral PostgreSQL micro-VM (sb-qd3aPZffOWJpvoAEJ20N4K). Speedup: 97.2%.</div>
-          <div class="text-emerald-300">🐙 [GitHub Delivery] Atomic Pull Request delivered: https://github.com/ahmedharib/mockStore/pull/12.</div>
-          <div class="text-white/50">📡 [Aegis Direct DB Watchdog] Remediation cycle finished. Resuming active monitoring...</div>
+          <div class="text-emerald-400">✅ [Core Verifier] Meta Model API (muse-spark-1.2), Modal Cloud, and GitHub PR delivery ready.</div>
+          <div class="text-white/70">📡 [Aegis Direct DB Watchdog] Baseline initialized. Active monitoring engaged.</div>
+          <div class="text-solar">⚡ [Aegis Direct DB Watchdog] Active unindexed sequential scan surge detected (+9,450,000 tuples read)!</div>
+          <div class="text-white">🚨 [Aegis SRE] Meta Muse Spark synthesized zero-downtime CONCURRENTLY index in 9.32s.</div>
+          <div class="text-signal">☁️ [Modal Cloud DB Sandbox] Ephemeral micro-VM verified candidate patch. Speedup: 97.2%.</div>
+          <div class="text-emerald-300">🐙 [GitHub Delivery] Atomic Pull Request delivered to target repo.</div>
         </div>
       </div>
 
     </section>
 
-    <!-- ================= TAB 2: SERVICES & ONBOARDING ================= -->
-    <section id="tab-content-projects" class="tab-pane hidden space-y-6">
+    <!-- ================= TAB 2: CONNECTED APPS & MODULAR CONTRACTS ================= -->
+    <section id="tab-content-projects" class="tab-pane hidden space-y-8">
       
-      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm">
-        <div class="flex items-center justify-between border-b border-graphite/10 pb-4 mb-6">
+      <!-- Connected Apps Grid -->
+      <div class="space-y-4">
+        <div class="flex items-center justify-between">
           <div>
-            <h2 class="text-lg font-bold text-graphite">Service Integration Contract Manifest (`aegis.yaml`)</h2>
-            <p class="text-xs text-graphite/60 mt-0.5">Configure services to be autonomously monitored, sandboxed, and repaired by Aegis SRE.</p>
+            <h2 class="text-base font-extrabold text-graphite tracking-tight">Connected Applications & Services</h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Switch between active target apps or connect a new service to Aegis SRE.</p>
+          </div>
+          <button onclick="openConnectAppModal()" class="flex items-center space-x-1.5 text-xs font-bold bg-solar hover:bg-amber-400 text-graphite px-3.5 py-2 rounded-xl shadow-sm transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+            <span>+ Connect New App</span>
+          </button>
+        </div>
+
+        <div id="services-grid" class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <!-- Dynamically populated from /api/services -->
+        </div>
+      </div>
+
+      <!-- Active Service Configuration Manifest Editor -->
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div class="flex items-center justify-between border-b border-graphite/10 pb-5">
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-extrabold px-2 py-0.5 rounded bg-graphite/10 text-graphite uppercase font-mono" id="editor-manifest-filename">mockstore_aegis.yaml</span>
+              <h3 class="text-base font-bold text-graphite">Integration Contract Editor</h3>
+            </div>
+            <p class="text-xs text-graphite/60 mt-1">Configure database inspection thresholds, SLA targets, and upstream API contracts.</p>
           </div>
 
-          <div class="flex items-center space-x-2">
+          <div class="flex items-center space-x-2.5">
             <button onclick="runComplianceAudit()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition flex items-center space-x-1.5">
               <svg class="w-3.5 h-3.5 text-field" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               <span>Audit Compliance</span>
             </button>
             <button onclick="saveProjectConfig()" class="bg-solar hover:bg-amber-400 text-graphite px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition">
-              Save Manifest
+              Save Changes
             </button>
           </div>
         </div>
@@ -453,98 +459,88 @@
           
           <!-- Section 1: Project Metadata -->
           <div>
-            <h3 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
               <span class="w-2 h-2 rounded-full bg-solar mr-2"></span>
-              1. Target Project & Repository Metadata
-            </h3>
+              Service & Repository Details
+            </h4>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Service Name</label>
-                <input type="text" id="cfg-service-name" value="cupertino-coffee-store" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Service Name</label>
+                <input type="text" id="cfg-service-name" value="cupertino-coffee-store" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">GitHub Target Repository (owner/repo)</label>
-                <input type="text" id="cfg-repo" value="ahmedharib/mockStore" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">GitHub Target Repository</label>
+                <input type="text" id="cfg-repo" value="ahmedharib/mockStore" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Default Base Branch</label>
-                <input type="text" id="cfg-branch" value="master" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Default Branch</label>
+                <input type="text" id="cfg-branch" value="master" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
             </div>
           </div>
 
-          <!-- Section 2: Database Integration Contract (Vector A) -->
+          <!-- Section 2: Database Performance Contract (Vector A) -->
           <div class="border-t border-graphite/10 pt-5">
-            <h3 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
               <span class="w-2 h-2 rounded-full bg-field mr-2"></span>
-              2. Vector A: Database Performance & Read-Only Inspection Mandate
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              Vector A: Database Inspection & SLA Mandate
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Database Engine</label>
-                <select id="cfg-db-engine" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
-                  <option value="postgres">PostgreSQL (Live Telemetry / EXPLAIN)</option>
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Database Engine</label>
+                <select id="cfg-db-engine" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                  <option value="postgres">PostgreSQL (Telemetry / EXPLAIN)</option>
                   <option value="sqlite">SQLite (mode=ro)</option>
                 </select>
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Read-Only Connection Env Var</label>
-                <input type="text" id="cfg-db-env" value="DATABASE_RO_URL" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Read-Only Env Var</label>
+                <input type="text" id="cfg-db-env" value="DATABASE_RO_URL" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-mono font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">P99 Latency SLA Threshold</label>
-                <input type="number" id="cfg-sla-latency" value="1000" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Watchdog Scan Interval</label>
-                <input type="number" id="cfg-watchdog-interval" value="60" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">P99 SLA Threshold (ms)</label>
+                <input type="number" id="cfg-sla-latency" value="1000" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
             </div>
           </div>
 
           <!-- Section 3: Upstream Contract Drift (Vector B) -->
           <div class="border-t border-graphite/10 pt-5">
-            <h3 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
+            <h4 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
               <span class="w-2 h-2 rounded-full bg-signal mr-2"></span>
-              3. Vector B: Upstream API Contract Drift Configuration
-            </h3>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+              Vector B: Upstream API Drift Contract
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Dependency Name</label>
-                <input type="text" id="cfg-api-name" value="coffee_payment_gateway" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Dependency Name</label>
+                <input type="text" id="cfg-api-name" value="coffee_payment_gateway" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Baseline Spec (v1)</label>
-                <input type="text" id="cfg-api-v1" value="contracts/payment_gateway_v1.json" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Target Spec (v2)</label>
+                <input type="text" id="cfg-api-v2" value="contracts/payment_gateway_v2.json" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
 
               <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Target Spec (v2 / Live URL)</label>
-                <input type="text" id="cfg-api-v2" value="contracts/payment_gateway_v2.json" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
-              </div>
-
-              <div>
-                <label class="block text-xs font-semibold text-graphite/80 mb-1">Pytest Verification Target</label>
-                <input type="text" id="cfg-api-test" value="tests/test_payment_checkout.py" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+                <label class="block text-xs font-semibold text-graphite/80 mb-1.5">Verification Pytest Target</label>
+                <input type="text" id="cfg-api-test" value="tests/test_payment_checkout.py" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               </div>
             </div>
           </div>
 
         </form>
 
-        <!-- Compliance Check Modal / Panel -->
-        <div id="compliance-results" class="hidden mt-6 bg-daylight/70 border border-graphite/15 rounded-xl p-4 space-y-2">
+        <!-- Compliance Results Panel -->
+        <div id="compliance-results" class="hidden mt-6 bg-daylight/70 border border-graphite/15 rounded-2xl p-5 space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-xs font-bold text-graphite">Architectural Contract Audit Report</span>
             <span class="text-[11px] font-bold text-field" id="audit-status-badge">100% COMPLIANT</span>
           </div>
-          <div id="audit-items-list" class="space-y-1.5 text-xs text-graphite/80"></div>
+          <div id="audit-items-list" class="space-y-2 text-xs text-graphite/80"></div>
         </div>
 
       </div>
@@ -554,26 +550,26 @@
     <!-- ================= TAB 3: INCIDENT POST-MORTEMS & HISTORY ================= -->
     <section id="tab-content-history" class="tab-pane hidden space-y-6">
       
-      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm space-y-4">
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 sm:p-8 shadow-sm space-y-5">
         <div class="flex items-center justify-between border-b border-graphite/10 pb-4">
           <div>
-            <h2 class="text-lg font-bold text-graphite">Incident Post-Mortems & Autonomous Fix Archive</h2>
-            <p class="text-xs text-graphite/60 mt-0.5">Auditable records of all autonomous remediations, Meta Muse Spark diagnoses, and GitHub Pull Requests.</p>
+            <h2 class="text-base font-extrabold text-graphite tracking-tight">Autonomous Remediation Archive</h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Auditable records of all automated repairs, Meta Muse Spark diagnoses, and GitHub Pull Requests.</p>
           </div>
-          <button onclick="loadIncidents()" class="text-xs text-field hover:underline font-semibold">Refresh History</button>
+          <button onclick="loadIncidents()" class="text-xs text-field hover:underline font-bold">Refresh Archive</button>
         </div>
 
         <div class="overflow-x-auto">
           <table class="min-w-full divide-y divide-graphite/10 text-xs">
             <thead>
-              <tr class="text-left text-graphite/60 font-semibold bg-daylight/60">
-                <th class="py-3 px-4 rounded-l-lg">Incident ID</th>
+              <tr class="text-left text-graphite/60 font-bold bg-daylight/60">
+                <th class="py-3 px-4 rounded-l-xl">Incident ID</th>
                 <th class="py-3 px-4">Vector</th>
                 <th class="py-3 px-4">Service</th>
-                <th class="py-3 px-4">Diagnosis & Root Cause</th>
-                <th class="py-3 px-4">Sandbox Speedup</th>
+                <th class="py-3 px-4">Root Cause Diagnosis</th>
+                <th class="py-3 px-4">Sandbox Benchmark</th>
                 <th class="py-3 px-4">GitHub PR</th>
-                <th class="py-3 px-4 rounded-r-lg">Status</th>
+                <th class="py-3 px-4 rounded-r-xl">Status</th>
               </tr>
             </thead>
             <tbody id="incidents-table-body" class="divide-y divide-graphite/5">
@@ -585,70 +581,70 @@
 
     </section>
 
-    <!-- ================= TAB 4: INFRASTRUCTURE DIAGNOSTICS ================= -->
+    <!-- ================= TAB 4: INFRASTRUCTURE HEALTH ================= -->
     <section id="tab-content-diagnostics" class="tab-pane hidden space-y-6">
       
-      <div class="bg-white border border-graphite/10 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="bg-white border border-graphite/10 rounded-2xl p-6 sm:p-8 shadow-sm space-y-6">
         <div class="flex items-center justify-between border-b border-graphite/10 pb-4">
           <div>
-            <h2 class="text-lg font-bold text-graphite">Core SRE API Connectivity & Credentials</h2>
-            <p class="text-xs text-graphite/60 mt-0.5">Live status of external services powering Aegis closed-loop autonomous remediation.</p>
+            <h2 class="text-base font-extrabold text-graphite tracking-tight">Core SRE Infrastructure & Connectivity</h2>
+            <p class="text-xs text-graphite/60 mt-0.5">Live status of external integrations powering Aegis closed-loop autonomous repair.</p>
           </div>
           <button onclick="triggerVerification()" id="btn-diag-run" class="bg-solar hover:bg-amber-400 text-graphite px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition">
-            Run Live Diagnostics
+            Run Diagnostics
           </button>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           
           <!-- Card 1: Meta Model API -->
-          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-5 space-y-3">
+          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-6 space-y-3.5 hover:border-graphite/20 transition">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-graphite flex items-center">
                 <span class="w-2.5 h-2.5 rounded-full bg-signal mr-2"></span>
                 Meta Model API
               </span>
-              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded" id="diag-meta-badge">ONLINE</span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded" id="diag-meta-badge">ONLINE</span>
             </div>
-            <p class="text-xs text-graphite/70">LLM Reasoning & DDL Synthesis Engine (<code class="font-mono text-signal font-semibold">muse-spark-1.2</code>)</p>
-            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-lg p-2.5 space-y-1 text-graphite/70">
+            <p class="text-xs text-graphite/70">LLM Reasoning Engine (<code class="font-mono text-signal font-bold">muse-spark-1.2</code>)</p>
+            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-xl p-3 space-y-1.5 text-graphite/70">
               <div>Endpoint: <span class="text-graphite font-semibold">https://api.meta.ai/v1</span></div>
-              <div>Key: <span class="text-graphite font-semibold" id="diag-meta-key">LLM_11...1S1A</span></div>
-              <div>Roundtrip: <span class="text-field font-semibold" id="diag-meta-latency">1,521 ms</span></div>
+              <div>Key: <span class="text-graphite font-semibold" id="diag-meta-key">Configured in .env</span></div>
+              <div>Latency: <span class="text-field font-bold" id="diag-meta-latency">1,521 ms</span></div>
             </div>
           </div>
 
           <!-- Card 2: Modal Cloud -->
-          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-5 space-y-3">
+          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-6 space-y-3.5 hover:border-graphite/20 transition">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-graphite flex items-center">
                 <span class="w-2.5 h-2.5 rounded-full bg-field mr-2"></span>
                 Modal Cloud
               </span>
-              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded" id="diag-modal-badge">ACTIVE</span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded" id="diag-modal-badge">ACTIVE</span>
             </div>
             <p class="text-xs text-graphite/70">Serverless Ephemeral Micro-VMs for DDL & Pytest Verification</p>
-            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-lg p-2.5 space-y-1 text-graphite/70">
+            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-xl p-3 space-y-1.5 text-graphite/70">
               <div>App: <span class="text-graphite font-semibold">aegis-sre</span></div>
-              <div>Token ID: <span class="text-graphite font-semibold">ak-4MJ...E9CT</span></div>
-              <div>Spin-up Time: <span class="text-field font-semibold" id="diag-modal-latency">2.31 s</span></div>
+              <div>Protocol: <span class="text-graphite font-semibold">Single-Stream RPC</span></div>
+              <div>Spin-up: <span class="text-field font-bold" id="diag-modal-latency">2.51 s</span></div>
             </div>
           </div>
 
           <!-- Card 3: GitHub API -->
-          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-5 space-y-3">
+          <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-6 space-y-3.5 hover:border-graphite/20 transition">
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-graphite flex items-center">
                 <span class="w-2.5 h-2.5 rounded-full bg-solar mr-2"></span>
                 GitHub API
               </span>
-              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded" id="diag-github-badge">AUTHENTICATED</span>
+              <span class="text-[10px] bg-emerald-100 text-emerald-800 font-extrabold px-2 py-0.5 rounded" id="diag-github-badge">AUTHENTICATED</span>
             </div>
-            <p class="text-xs text-graphite/70">Atomic Git Branching, Tree Commit & Pull Request Delivery</p>
-            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-lg p-2.5 space-y-1 text-graphite/70">
-              <div>User: <span class="text-graphite font-semibold" id="diag-github-user">@ahmedharib</span></div>
-              <div>Repo: <span class="text-graphite font-semibold">ahmedharib/mockStore</span></div>
-              <div>Push Access: <span class="text-field font-semibold">YES</span></div>
+            <p class="text-xs text-graphite/70">Atomic Git Branching & Pull Request Delivery</p>
+            <div class="text-[11px] font-mono bg-white border border-graphite/10 rounded-xl p-3 space-y-1.5 text-graphite/70">
+              <div>Target: <span class="text-graphite font-semibold" id="diag-github-user">ahmedharib/mockStore</span></div>
+              <div>Write Access: <span class="text-field font-bold">YES</span></div>
+              <div>PR Deduplication: <span class="text-field font-bold">ACTIVE</span></div>
             </div>
           </div>
 
@@ -659,6 +655,83 @@
     </section>
 
   </main>
+
+  <!-- ================= MODAL: CONNECT NEW APP ================= -->
+  <div id="modal-connect-app" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-white border border-graphite/15 rounded-3xl max-w-lg w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+      
+      <div class="bg-graphite text-white px-7 py-5 flex items-center justify-between border-b border-white/10">
+        <div class="flex items-center space-x-2.5">
+          <span class="w-3 h-3 rounded-full bg-solar inline-block"></span>
+          <h3 class="text-base font-bold text-white">Connect New Application</h3>
+        </div>
+        <button onclick="closeConnectAppModal()" class="text-white/60 hover:text-white text-xl font-bold transition">&times;</button>
+      </div>
+
+      <form id="connect-app-form" onsubmit="handleCreateApp(event)" class="p-7 space-y-5">
+        
+        <!-- Quick Presets -->
+        <div>
+          <label class="block text-xs font-bold text-graphite/70 mb-2">Service Presets</label>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick="applyPreset('postgres')" class="text-[11px] font-bold px-3 py-1.5 rounded-xl border border-graphite/15 hover:bg-daylight text-graphite transition">
+              FastAPI + PostgreSQL
+            </button>
+            <button type="button" onclick="applyPreset('sqlite')" class="text-[11px] font-bold px-3 py-1.5 rounded-xl border border-graphite/15 hover:bg-daylight text-graphite transition">
+              SQLite Microservice
+            </button>
+            <button type="button" onclick="applyPreset('api')" class="text-[11px] font-bold px-3 py-1.5 rounded-xl border border-graphite/15 hover:bg-daylight text-graphite transition">
+              API Integration
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-graphite/80 mb-1">Service Identifier</label>
+          <input type="text" id="new-app-name" required placeholder="e.g. billing-service" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+          <span class="text-[10px] text-graphite/50 mt-1 block">A dedicated <code class="font-mono">&lt;name&gt;_aegis.yaml</code> manifest will be created automatically.</span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-graphite/80 mb-1">GitHub Repository</label>
+            <input type="text" id="new-app-repo" required placeholder="owner/repo" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-graphite/80 mb-1">Base Branch</label>
+            <input type="text" id="new-app-branch" value="main" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-graphite/80 mb-1">Database Engine</label>
+            <select id="new-app-engine" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+              <option value="postgres">PostgreSQL</option>
+              <option value="sqlite">SQLite</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-graphite/80 mb-1">Latency SLA Target (ms)</label>
+            <input type="number" id="new-app-sla" value="800" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+          </div>
+        </div>
+
+        <div class="pt-3 flex items-center justify-end space-x-3 border-t border-graphite/10">
+          <button type="button" onclick="closeConnectAppModal()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-4 py-2.5 rounded-xl text-xs font-semibold transition">
+            Cancel
+          </button>
+          <button type="submit" id="btn-submit-create-app" class="bg-solar hover:bg-amber-400 text-graphite px-5 py-2.5 rounded-xl text-xs font-bold shadow-sm transition">
+            Connect & Activate App
+          </button>
+        </div>
+
+      </form>
+
+    </div>
+  </div>
 
   <!-- ================= POST-MORTEM SLIDE-OVER MODAL ================= -->
   <div id="postmortem-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
@@ -672,9 +745,7 @@
         <button onclick="closePostmortemModal()" class="text-white/60 hover:text-white text-xl font-bold">&times;</button>
       </div>
 
-      <div class="p-6 overflow-y-auto space-y-4 custom-scrollbar text-xs text-graphite/90" id="pm-modal-body">
-        <!-- Rendered markdown / content -->
-      </div>
+      <div class="p-6 overflow-y-auto space-y-4 custom-scrollbar text-xs text-graphite/90" id="pm-modal-body"></div>
 
       <div class="bg-daylight/80 border-t border-graphite/10 px-6 py-3.5 flex items-center justify-between">
         <a id="pm-modal-pr-link" href="#" target="_blank" class="inline-flex items-center space-x-1.5 bg-graphite hover:bg-black text-white px-4 py-2 rounded-xl text-xs font-bold transition">
@@ -689,11 +760,11 @@
   </div>
 
   <!-- ================= FOOTER ================= -->
-  <footer class="bg-white border-t border-graphite/10 py-4 mt-auto">
+  <footer class="bg-white border-t border-graphite/10 py-5 mt-auto">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-graphite/50 gap-2">
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center space-x-2.5">
         <img src="/static/logo.png" alt="Aegis Logo" class="w-4 h-4 object-contain">
-        <span class="font-semibold text-graphite/80">Aegis SRE</span>
+        <span class="font-bold text-graphite/80">Aegis SRE</span>
         <span>— Closed-Loop Autonomous SRE Agent</span>
       </div>
       <div>
@@ -704,9 +775,9 @@
 
   <!-- ================= REACTIVE CONTROLLER (JS) ================= -->
   <script>
-    // State Store
     let currentTab = 'operations';
     let incidents = [];
+    let servicesList = [];
     let systemStatus = {};
 
     function logToConsole(message, type = 'info') {
@@ -746,7 +817,7 @@
       document.querySelectorAll('.tab-pane').forEach(el => el.classList.add('hidden'));
       document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.classList.remove('bg-graphite', 'text-white', 'shadow-sm');
-        btn.classList.add('text-graphite/70', 'hover:text-graphite', 'hover:bg-white/60');
+        btn.classList.add('text-graphite/70', 'hover:text-graphite', 'hover:bg-white');
       });
 
       const pane = document.getElementById(`tab-content-${tabName}`);
@@ -754,11 +825,185 @@
       if (pane) pane.classList.remove('hidden');
       if (btn) {
         btn.classList.add('bg-graphite', 'text-white', 'shadow-sm');
-        btn.classList.remove('text-graphite/70', 'hover:bg-white/60');
+        btn.classList.remove('text-graphite/70', 'hover:bg-white');
       }
 
       if (tabName === 'history') loadIncidents();
-      if (tabName === 'projects') loadConfig();
+      if (tabName === 'projects') {
+        loadServices();
+        loadConfig();
+      }
+    }
+
+    async function loadServices() {
+      try {
+        const res = await fetch('/api/services');
+        if (res.ok) {
+          const data = await res.json();
+          servicesList = data.services || [];
+          renderServicesSwitcher(servicesList, data.active);
+          renderServicesGrid(servicesList, data.active);
+        }
+      } catch (err) {
+        console.warn('Failed to load services:', err);
+      }
+    }
+
+    function renderServicesSwitcher(services, activeFile) {
+      const switcher = document.getElementById('service-switcher');
+      if (!switcher) return;
+
+      switcher.innerHTML = services.map(s => `
+        <option value="${s.filename}" class="bg-graphite text-white" ${s.filename === activeFile ? 'selected' : ''}>
+          ${s.service_name} (${s.filename})
+        </option>
+      `).join('');
+    }
+
+    function renderServicesGrid(services, activeFile) {
+      const grid = document.getElementById('services-grid');
+      if (!grid) return;
+
+      const cardsHtml = services.map(s => {
+        const isActive = s.filename === activeFile;
+        return `
+          <div class="bg-white border ${isActive ? 'border-field ring-2 ring-field/20' : 'border-graphite/10'} rounded-2xl p-5 flex flex-col justify-between hover:border-graphite/20 transition space-y-4">
+            <div class="flex items-start justify-between">
+              <div>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-graphite/10 text-graphite font-semibold">${s.filename}</span>
+                <h4 class="text-sm font-extrabold text-graphite mt-2">${s.service_name}</h4>
+                <p class="text-xs font-mono text-graphite/60 mt-0.5">${s.repository}</p>
+              </div>
+              ${isActive
+                ? `<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field">ACTIVE</span>`
+                : `<button onclick="switchService('${s.filename}')" class="text-xs font-bold text-graphite hover:text-field bg-daylight px-3 py-1 rounded-lg border border-graphite/15 transition">Switch</button>`
+              }
+            </div>
+
+            <div class="border-t border-graphite/5 pt-3 flex items-center justify-between text-[11px] text-graphite/60">
+              <span>Engine: <strong class="text-graphite font-semibold uppercase">${s.db_engine || 'postgres'}</strong></span>
+              <span>SLA: <strong class="text-graphite font-semibold">${s.sla_latency || 1000}ms</strong></span>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Plus Add card
+      const addCard = `
+        <div onclick="openConnectAppModal()" class="border-2 border-dashed border-graphite/20 hover:border-solar rounded-2xl p-5 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-white/60 transition group min-h-[140px]">
+          <div class="w-10 h-10 rounded-full bg-daylight group-hover:bg-solar/20 flex items-center justify-center text-graphite group-hover:text-amber-900 transition mb-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+          </div>
+          <span class="text-xs font-bold text-graphite">Connect Another App</span>
+          <span class="text-[11px] text-graphite/50 mt-0.5">Add PostgreSQL or API service</span>
+        </div>
+      `;
+
+      grid.innerHTML = cardsHtml + addCard;
+    }
+
+    async function switchService(filename) {
+      logToConsole(`🔄 Switching active service to ${filename}...`, 'info');
+      try {
+        const res = await fetch('/api/services/select', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ filename: filename })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          logToConsole(`✅ Successfully active on '${data.service}' (${data.repository})!`, 'success');
+          
+          // Update header & badges
+          document.getElementById('monitored-service-label').textContent = data.service;
+          document.getElementById('monitored-repo-label').textContent = data.repository;
+          const summaryEl = document.getElementById('active-target-summary-label');
+          if (summaryEl) summaryEl.textContent = data.service;
+          const visEl = document.getElementById('visualizer-service-name');
+          if (visEl) visEl.textContent = data.service;
+          const slaPill = document.getElementById('kpi-sla-target-pill');
+          if (slaPill && data.sla_latency) slaPill.textContent = `Target < ${data.sla_latency}ms`;
+
+          // Reload config editor & services list
+          await loadServices();
+          await loadConfig();
+          await fetchStatus();
+        }
+      } catch (err) {
+        logToConsole(`❌ Service switch failed: ${err}`, 'error');
+      }
+    }
+
+    function openConnectAppModal() {
+      document.getElementById('modal-connect-app').classList.remove('hidden');
+    }
+
+    function closeConnectAppModal() {
+      document.getElementById('modal-connect-app').classList.add('hidden');
+    }
+
+    function applyPreset(type) {
+      if (type === 'postgres') {
+        document.getElementById('new-app-name').value = 'auth-service';
+        document.getElementById('new-app-repo').value = 'ahmedharib/auth-service';
+        document.getElementById('new-app-branch').value = 'main';
+        document.getElementById('new-app-engine').value = 'postgres';
+        document.getElementById('new-app-sla').value = 800;
+      } else if (type === 'sqlite') {
+        document.getElementById('new-app-name').value = 'inventory-lite';
+        document.getElementById('new-app-repo').value = 'ahmedharib/inventory-lite';
+        document.getElementById('new-app-branch').value = 'master';
+        document.getElementById('new-app-engine').value = 'sqlite';
+        document.getElementById('new-app-sla').value = 400;
+      } else if (type === 'api') {
+        document.getElementById('new-app-name').value = 'payment-gateway-proxy';
+        document.getElementById('new-app-repo').value = 'ahmedharib/payment-proxy';
+        document.getElementById('new-app-branch').value = 'main';
+        document.getElementById('new-app-engine').value = 'postgres';
+        document.getElementById('new-app-sla').value = 1200;
+      }
+    }
+
+    async function handleCreateApp(e) {
+      e.preventDefault();
+      const btn = document.getElementById('btn-submit-create-app');
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+
+      const payload = {
+        service_name: document.getElementById('new-app-name').value,
+        repository: document.getElementById('new-app-repo').value,
+        default_branch: document.getElementById('new-app-branch').value,
+        db_engine: document.getElementById('new-app-engine').value,
+        sla_latency: parseFloat(document.getElementById('new-app-sla').value) || 1000,
+        db_env: 'DATABASE_RO_URL',
+        watchdog_interval: 60
+      };
+
+      try {
+        const res = await fetch('/api/services/create', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          logToConsole(`🎉 Connected & activated new application: '${data.service}' (${data.filename})!`, 'success');
+          closeConnectAppModal();
+          await loadServices();
+          await loadConfig();
+          await fetchStatus();
+          setActiveTab('projects');
+        } else {
+          const err = await res.json();
+          logToConsole(`❌ Failed to connect app: ${err.detail || 'Error'}`, 'error');
+        }
+      } catch (err) {
+        logToConsole(`❌ Error creating app: ${err}`, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Connect & Activate App';
+      }
     }
 
     async function fetchStatus() {
@@ -774,17 +1019,15 @@
           if (incEl) incEl.textContent = systemStatus.incidents_count || '2';
           const badgeEl = document.getElementById('history-badge');
           if (badgeEl) badgeEl.textContent = systemStatus.incidents_count || '2';
-          const hbEl = document.getElementById('last-heartbeat-time');
-          if (hbEl) hbEl.textContent = new Date().toLocaleTimeString();
 
           const pill = document.getElementById('watchdog-state-pill');
           if (pill) {
             if (systemStatus.watchdog_enabled) {
               pill.textContent = 'ACTIVE (RO)';
-              pill.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field';
+              pill.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field';
             } else {
               pill.textContent = 'STANDBY';
-              pill.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-graphite/10 text-graphite/70';
+              pill.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-graphite/10 text-graphite/70';
             }
           }
         }
@@ -811,15 +1054,15 @@
       if (!tbody) return;
 
       if (!items || items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-graphite/50">No incidents recorded yet. Trigger a vector above!</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-graphite/50 font-medium">No incidents recorded yet. Trigger a vector above!</td></tr>`;
         return;
       }
 
       tbody.innerHTML = items.map((inc, idx) => {
         const isVectorA = (inc.vector || 'a').toLowerCase() === 'a';
         const vectorBadge = isVectorA
-          ? `<span class="bg-solar/20 text-amber-900 font-bold px-2 py-0.5 rounded">Vector A (DB)</span>`
-          : `<span class="bg-signal/15 text-signal font-bold px-2 py-0.5 rounded">Vector B (API)</span>`;
+          ? `<span class="bg-solar/20 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[10px]">Vector A (DB)</span>`
+          : `<span class="bg-signal/15 text-signal font-extrabold px-2 py-0.5 rounded text-[10px]">Vector B (API)</span>`;
 
         const speedup = inc.speedup_pct || (isVectorA ? '97.2%' : '100%');
         const prNumber = inc.pr_number || (isVectorA ? '#12' : '#14');
@@ -831,7 +1074,7 @@
             <td class="py-3 px-4">${vectorBadge}</td>
             <td class="py-3 px-4 font-semibold text-graphite">${inc.service || 'cupertino-coffee-store'}</td>
             <td class="py-3 px-4 text-graphite/70 max-w-xs truncate">${inc.diagnosis || 'Sequential scan bottleneck resolved with zero-downtime index.'}</td>
-            <td class="py-3 px-4 font-bold text-field">${speedup}</td>
+            <td class="py-3 px-4 font-extrabold text-field">${speedup}</td>
             <td class="py-3 px-4">
               <a href="${prUrl}" target="_blank" onclick="event.stopPropagation()" class="text-graphite font-bold underline hover:text-field">PR ${prNumber}</a>
             </td>
@@ -967,12 +1210,23 @@
         const res = await fetch('/api/config');
         if (res.ok) {
           const cfg = await res.json();
-          document.getElementById('cfg-service-name').value = cfg.project?.service_name || '';
-          document.getElementById('cfg-repo').value = cfg.project?.repository || '';
-          document.getElementById('cfg-branch').value = cfg.project?.default_branch || 'master';
-          document.getElementById('cfg-db-engine').value = cfg.database?.engine || 'postgres';
-          document.getElementById('cfg-db-env').value = cfg.database?.read_only_connection_env || 'DATABASE_RO_URL';
-          document.getElementById('cfg-sla-latency').value = cfg.database?.sla_thresholds?.p99_latency_ms || 1000;
+          const nameEl = document.getElementById('cfg-service-name');
+          if (nameEl) nameEl.value = cfg.project?.service_name || '';
+          const repoEl = document.getElementById('cfg-repo');
+          if (repoEl) repoEl.value = cfg.project?.repository || '';
+          const branchEl = document.getElementById('cfg-branch');
+          if (branchEl) branchEl.value = cfg.project?.default_branch || 'master';
+          const engEl = document.getElementById('cfg-db-engine');
+          if (engEl) engEl.value = cfg.database?.engine || 'postgres';
+          const envEl = document.getElementById('cfg-db-env');
+          if (envEl) envEl.value = cfg.database?.read_only_connection_env || 'DATABASE_RO_URL';
+          const slaEl = document.getElementById('cfg-sla-latency');
+          if (slaEl) slaEl.value = cfg.database?.sla_thresholds?.p99_latency_ms || 1000;
+
+          const fileLabel = document.getElementById('editor-manifest-filename');
+          if (fileLabel && cfg.path) {
+            fileLabel.textContent = cfg.path.split(/[\\/]/).pop();
+          }
         }
       } catch (err) {
         console.error('Config load failed', err);
@@ -989,7 +1243,7 @@
         sla_latency: parseFloat(document.getElementById('cfg-sla-latency').value),
       };
 
-      logToConsole('💾 Updating project integration manifest...', 'info');
+      logToConsole('💾 Updating active project integration manifest...', 'info');
       try {
         const res = await fetch('/api/config', {
           method: 'POST',
@@ -999,6 +1253,7 @@
         const data = await res.json();
         if (data.saved) {
           logToConsole('✅ Manifest saved and active configuration reloaded!', 'success');
+          await loadServices();
           await fetchStatus();
         }
       } catch (e) {
@@ -1042,13 +1297,10 @@
       logToConsole('📋 Synthesized DDL copied to clipboard!', 'info');
     }
 
-    function openNewProjectModal() {
-      setActiveTab('projects');
-    }
-
     // Initialize on load & start polling
     window.addEventListener('DOMContentLoaded', () => {
       fetchStatus();
+      loadServices();
       loadIncidents();
       setInterval(fetchStatus, 4000);
     });

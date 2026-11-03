@@ -50,6 +50,37 @@ def test_ui_and_control_plane_endpoints():
     assert "services" in services_data
     assert len(services_data["services"]) >= 1
 
+    # 4b. Service switching API
+    resp_select = client.post("/api/services/select", json={"filename": "logistics_service_aegis.yaml"})
+    assert resp_select.status_code == 200
+    select_data = resp_select.json()
+    assert select_data["service"] == "logistics-delivery-service"
+    assert select_data["repository"] == "ahmedharib/logistics-api"
+
+    # Switch back to mockstore
+    resp_switch_back = client.post("/api/services/select", json={"filename": "mockstore_aegis.yaml"})
+    assert resp_switch_back.status_code == 200
+    assert resp_switch_back.json()["service"] == "cupertino-coffee-store"
+
+    # 4c. Service creation API
+    resp_create = client.post("/api/services/create", json={
+        "service_name": "test-microservice",
+        "repository": "ahmedharib/test-microservice",
+        "default_branch": "main",
+        "db_engine": "postgres",
+        "sla_latency": 600
+    })
+    assert resp_create.status_code == 200
+    create_data = resp_create.json()
+    assert create_data["status"] == "CREATED"
+    assert create_data["service"] == "test-microservice"
+
+    # Clean up test created file and switch back
+    import os
+    if os.path.exists("test-microservice_aegis.yaml"):
+        os.remove("test-microservice_aegis.yaml")
+    client.post("/api/services/select", json={"filename": "mockstore_aegis.yaml"})
+
     # 5. Config API
     resp_cfg = client.get("/api/config")
     assert resp_cfg.status_code == 200
