@@ -5,7 +5,7 @@ project:
   repository: "ahmedharib/mockStore"
   default_branch: "master"
   code_dir: "C:/Users/ahmed/Desktop/mockStore"
-  read_only_source: true
+  read_only_source: false
 
 observability:
   provider: "direct"

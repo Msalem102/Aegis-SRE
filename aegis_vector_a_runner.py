@@ -296,6 +296,17 @@ def run_vector_a_remediation(
         mf.write(verified_synthesis["ddl_script"])
     print(f" -> Saved Production DDL Migration: {migration_abs_path}")
 
+    # Also sync generated migration file directly into target codebase directory (e.g. mockStore/migrations)
+    if base_dir and os.path.isdir(base_dir) and os.path.abspath(base_dir) != os.path.abspath(output_base_dir):
+        target_repo_migration = os.path.join(base_dir, migration_rel_path.replace("/", os.sep))
+        try:
+            os.makedirs(os.path.dirname(target_repo_migration), exist_ok=True)
+            with open(target_repo_migration, "w", encoding="utf-8") as rf:
+                rf.write(verified_synthesis["ddl_script"])
+            print(f" -> Synced Migration to Target Repository: {target_repo_migration}")
+        except Exception as sync_err:
+            print(f"    (Notice: Local repo sync skipped: {sync_err})")
+
     files_to_commit = {
         migration_rel_path: verified_synthesis["ddl_script"]
     }

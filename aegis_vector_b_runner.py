@@ -278,6 +278,9 @@ def run_vector_b_remediation(
         patches_dir = os.path.join(output_base_dir, "patches", incident_id.replace("-", "_"))
         apply_verified_patch_to_repo(patches_dir, verified_synthesis["refactored_files"])
         print(f" -> Saved Verified Refactored Artifacts (read-only target safe): {patches_dir}")
+    else:
+        apply_verified_patch_to_repo(base_dir, verified_synthesis["refactored_files"])
+        print(f" -> Applied Verified Refactoring directly to repository: {base_dir}")
 
     # Compute Git repository root-relative POSIX file paths for atomic GitHub PR commit
     files_to_commit: Dict[str, str] = {}

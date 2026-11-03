@@ -510,7 +510,7 @@
             </div>
             <button onclick="openConnectAppModal()" class="flex items-center space-x-1.5 text-xs font-bold bg-solar hover:bg-amber-400 text-graphite px-3.5 py-2 rounded-xl shadow-sm transition">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-              <span>+ Connect New App</span>
+              <span>Connect New App</span>
             </button>
           </div>
 
@@ -747,7 +747,10 @@
         <!-- Quick Presets -->
         <div>
           <label class="block text-xs font-bold text-graphite/70 mb-2">Service Presets</label>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
+            <button type="button" onclick="applyPreset('mockstore')" class="text-[11px] font-bold px-3 py-1.5 rounded-xl border border-solar/40 bg-solar/10 hover:bg-solar/20 text-graphite transition">
+              mockStore (Local)
+            </button>
             <button type="button" onclick="applyPreset('postgres')" class="text-[11px] font-bold px-3 py-1.5 rounded-xl border border-graphite/15 hover:bg-daylight text-graphite transition">
               FastAPI + PostgreSQL
             </button>
@@ -778,6 +781,12 @@
           </div>
         </div>
 
+        <div>
+          <label class="block text-xs font-bold text-graphite/80 mb-1">Local Codebase Directory (Optional)</label>
+          <input type="text" id="new-app-codedir" placeholder="e.g. C:/Users/ahmed/Desktop/mockStore or leave blank" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
+          <span class="text-[10px] text-graphite/50 mt-1 block">If specified, verified migrations and refactorings will sync directly into this local folder.</span>
+        </div>
+
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-xs font-bold text-graphite/80 mb-1">Database Engine</label>
@@ -792,6 +801,9 @@
             <input type="number" id="new-app-sla" value="800" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-3.5 py-2.5 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
           </div>
         </div>
+
+        <div id="modal-connect-error" class="hidden text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3 font-semibold"></div>
+        <div id="modal-connect-success" class="hidden text-xs text-field bg-emerald-50 border border-emerald-200 rounded-xl p-3 font-semibold"></div>
 
         <div class="pt-3 flex items-center justify-end space-x-3 border-t border-graphite/10">
           <button type="button" onclick="closeConnectAppModal()" class="bg-white hover:bg-daylight text-graphite border border-graphite/20 px-4 py-2.5 rounded-xl text-xs font-semibold transition">
@@ -1008,32 +1020,53 @@
     }
 
     function applyPreset(type) {
-      if (type === 'postgres') {
+      if (type === 'mockstore') {
+        document.getElementById('new-app-name').value = 'cupertino-coffee-store';
+        document.getElementById('new-app-repo').value = 'ahmedharib/mockStore';
+        document.getElementById('new-app-branch').value = 'master';
+        document.getElementById('new-app-engine').value = 'postgres';
+        document.getElementById('new-app-sla').value = 1000;
+        const codeDirEl = document.getElementById('new-app-codedir');
+        if (codeDirEl) codeDirEl.value = 'C:/Users/ahmed/Desktop/mockStore';
+      } else if (type === 'postgres') {
         document.getElementById('new-app-name').value = 'auth-service';
         document.getElementById('new-app-repo').value = 'ahmedharib/auth-service';
         document.getElementById('new-app-branch').value = 'main';
         document.getElementById('new-app-engine').value = 'postgres';
         document.getElementById('new-app-sla').value = 800;
+        const codeDirEl = document.getElementById('new-app-codedir');
+        if (codeDirEl) codeDirEl.value = '';
       } else if (type === 'sqlite') {
         document.getElementById('new-app-name').value = 'inventory-lite';
         document.getElementById('new-app-repo').value = 'ahmedharib/inventory-lite';
         document.getElementById('new-app-branch').value = 'master';
         document.getElementById('new-app-engine').value = 'sqlite';
         document.getElementById('new-app-sla').value = 400;
+        const codeDirEl = document.getElementById('new-app-codedir');
+        if (codeDirEl) codeDirEl.value = '';
       } else if (type === 'api') {
         document.getElementById('new-app-name').value = 'payment-gateway-proxy';
         document.getElementById('new-app-repo').value = 'ahmedharib/payment-proxy';
         document.getElementById('new-app-branch').value = 'main';
         document.getElementById('new-app-engine').value = 'postgres';
         document.getElementById('new-app-sla').value = 1200;
+        const codeDirEl = document.getElementById('new-app-codedir');
+        if (codeDirEl) codeDirEl.value = '';
       }
     }
 
     async function handleCreateApp(e) {
       e.preventDefault();
       const btn = document.getElementById('btn-submit-create-app');
+      const errBox = document.getElementById('modal-connect-error');
+      const succBox = document.getElementById('modal-connect-success');
+      if (errBox) errBox.classList.add('hidden');
+      if (succBox) succBox.classList.add('hidden');
+
       btn.disabled = true;
       btn.textContent = 'Connecting...';
+
+      const codeDirVal = document.getElementById('new-app-codedir') ? document.getElementById('new-app-codedir').value.trim() : '';
 
       const payload = {
         service_name: document.getElementById('new-app-name').value,
@@ -1041,6 +1074,7 @@
         default_branch: document.getElementById('new-app-branch').value,
         db_engine: document.getElementById('new-app-engine').value,
         sla_latency: parseFloat(document.getElementById('new-app-sla').value) || 1000,
+        code_dir: codeDirVal,
         db_env: 'DATABASE_RO_URL',
         watchdog_interval: 60
       };
@@ -1053,17 +1087,32 @@
         });
         if (res.ok) {
           const data = await res.json();
+          if (succBox) {
+            succBox.textContent = `Connected '${data.service}' (${data.filename}) successfully! Activating...`;
+            succBox.classList.remove('hidden');
+          }
           logToConsole(`[Success] Connected & activated new application: '${data.service}' (${data.filename})`, 'success');
-          closeConnectAppModal();
-          await loadServices();
-          await loadConfig();
-          await fetchStatus();
-          setActiveTab('projects');
+          setTimeout(async () => {
+            closeConnectAppModal();
+            await loadServices();
+            await loadConfig();
+            await fetchStatus();
+            setActiveTab('projects');
+          }, 600);
         } else {
           const err = await res.json();
-          logToConsole(`[Error] Failed to connect app: ${err.detail || 'Error'}`, 'error');
+          const msg = err.detail || 'Failed to connect service.';
+          if (errBox) {
+            errBox.textContent = msg;
+            errBox.classList.remove('hidden');
+          }
+          logToConsole(`[Error] Failed to connect app: ${msg}`, 'error');
         }
       } catch (err) {
+        if (errBox) {
+          errBox.textContent = `Network or server error: ${err}`;
+          errBox.classList.remove('hidden');
+        }
         logToConsole(`[Error] Error creating app: ${err}`, 'error');
       } finally {
         btn.disabled = false;

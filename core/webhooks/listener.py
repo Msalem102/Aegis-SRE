@@ -408,7 +408,7 @@ def create_webhook_app(
                 "repository": repository,
                 "default_branch": default_branch,
                 "code_dir": code_dir if code_dir else None,
-                "read_only_source": True
+                "read_only_source": False if code_dir else True
             },
             "observability": {
                 "provider": "direct",
