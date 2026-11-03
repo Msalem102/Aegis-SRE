@@ -151,6 +151,19 @@ def cmd_run(vector: str, config_path: str, query: Optional[str] = None, skip_ver
     return 0
 
 
+def find_free_port(start_port: int = 8080, max_attempts: int = 15) -> int:
+    """Finds an available TCP port starting from start_port."""
+    import socket
+    for candidate in range(start_port, start_port + max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(("0.0.0.0", candidate))
+                return candidate
+            except OSError:
+                continue
+    return start_port
+
+
 def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchdog: bool = False, skip_verify: bool = False) -> int:
     code = cmd_check(config_path)
     if code != 0:
@@ -161,19 +174,23 @@ def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchd
         from verify_apis import verify_all_apis
         verify_all_apis(config_path=config_path)
 
+    actual_port = find_free_port(port)
+    if actual_port != port:
+        print(f"⚠️  Port {port} is occupied by another process. Automatically switched to port {actual_port}.")
+
     import uvicorn
     from core.webhooks.listener import create_webhook_app
 
     print("=" * 78)
-    print(f"🛡️  AEGIS SRE Autonomous Webhook & Watchdog Daemon Listening on http://{host}:{port}")
-    print(f"   • SRE Control Plane UI: http://localhost:{port}/ (or /dashboard)")
-    print(f"   • Alert Webhook URL:    http://localhost:{port}/webhooks/alert")
-    print(f"   • Health Check URL:     http://localhost:{port}/health")
+    print(f"🛡️  AEGIS SRE Autonomous Webhook & Watchdog Daemon Listening on http://{host}:{actual_port}")
+    print(f"   • SRE Control Plane UI: http://localhost:{actual_port}/ (or http://127.0.0.1:{actual_port}/)")
+    print(f"   • Alert Webhook URL:    http://localhost:{actual_port}/webhooks/alert")
+    print(f"   • Health Check URL:     http://localhost:{actual_port}/health")
     print(f"   • Direct DB Watchdog:   {'ENABLED' if watchdog else 'DISABLED (pass --watchdog to enable)'}")
     print("=" * 78)
 
     app = create_webhook_app(config_path=config_path, enable_db_watchdog=watchdog)
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(app, host=host, port=actual_port)
     return 0
 
 
@@ -183,17 +200,20 @@ def cmd_ui(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchdog: 
     import threading
 
     default_config = config_path if (config_path and os.path.exists(config_path)) else ("mockstore_aegis.yaml" if os.path.exists("mockstore_aegis.yaml") else "aegis.yaml")
+    actual_port = find_free_port(port)
+    if actual_port != port:
+        print(f"⚠️  Port {port} is occupied by another process. Automatically launching on port {actual_port}.")
 
     if not no_browser:
         def _open():
             time.sleep(1.2)
             try:
-                webbrowser.open(f"http://localhost:{port}/")
+                webbrowser.open(f"http://localhost:{actual_port}/")
             except Exception:
                 pass
         threading.Thread(target=_open, daemon=True).start()
 
-    return cmd_listen(config_path=default_config, host=host, port=port, watchdog=watchdog, skip_verify=skip_verify)
+    return cmd_listen(config_path=default_config, host=host, port=actual_port, watchdog=watchdog, skip_verify=skip_verify)
 
 
 def cmd_verify(config_path: str) -> int:

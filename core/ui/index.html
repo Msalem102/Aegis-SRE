@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Aegis SRE — Autonomous Incident Response & Remediation</title>
+  
+  <!-- Clear any old Service Worker registered on localhost by other projects -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var reg of registrations) {
+          reg.unregister();
+        }
+      });
+    }
+  </script>
+
   <link rel="icon" type="image/png" href="/static/favicon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -754,15 +766,26 @@
         const res = await fetch('/api/status');
         if (res.ok) {
           systemStatus = await res.json();
-          document.getElementById('monitored-service-label').textContent = systemStatus.service || 'cupertino-coffee-store';
-          document.getElementById('monitored-repo-label').textContent = systemStatus.repository || 'ahmedharib/mockStore';
-          document.getElementById('kpi-incidents-count').textContent = systemStatus.incidents_count || '2';
-          document.getElementById('history-badge').textContent = systemStatus.incidents_count || '2';
-          document.getElementById('last-heartbeat-time').textContent = new Date().toLocaleTimeString();
+          const svcEl = document.getElementById('monitored-service-label');
+          if (svcEl) svcEl.textContent = systemStatus.service || 'cupertino-coffee-store';
+          const repoEl = document.getElementById('monitored-repo-label');
+          if (repoEl) repoEl.textContent = systemStatus.repository || 'ahmedharib/mockStore';
+          const incEl = document.getElementById('kpi-incidents-count');
+          if (incEl) incEl.textContent = systemStatus.incidents_count || '2';
+          const badgeEl = document.getElementById('history-badge');
+          if (badgeEl) badgeEl.textContent = systemStatus.incidents_count || '2';
+          const hbEl = document.getElementById('last-heartbeat-time');
+          if (hbEl) hbEl.textContent = new Date().toLocaleTimeString();
 
-          if (systemStatus.watchdog_enabled) {
-            document.getElementById('watchdog-state-pill').textContent = 'ACTIVE (RO)';
-            document.getElementById('watchdog-state-pill').className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field';
+          const pill = document.getElementById('watchdog-state-pill');
+          if (pill) {
+            if (systemStatus.watchdog_enabled) {
+              pill.textContent = 'ACTIVE (RO)';
+              pill.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field';
+            } else {
+              pill.textContent = 'STANDBY';
+              pill.className = 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-graphite/10 text-graphite/70';
+            }
           }
         }
       } catch (err) {

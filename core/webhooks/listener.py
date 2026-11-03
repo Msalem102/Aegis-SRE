@@ -17,7 +17,7 @@ import time
 import hashlib
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from core.config.aegis_config import AegisConfigLoader
 from core.webhooks.alert_normalizer import AlertEventNormalizer
@@ -152,9 +152,10 @@ def create_webhook_app(
             interval = manifest.observability.watchdog_interval_seconds if manifest.observability else 60
             last_seq_snapshot: Dict[str, int] = {}
             is_initial_poll = True
+            db_offline_logged = False
 
             async def _db_watchdog_loop():
-                nonlocal is_initial_poll
+                nonlocal is_initial_poll, db_offline_logged
                 print(f"📡 [Aegis Direct DB Watchdog] Monitoring PostgreSQL read-only telemetry every {interval}s...")
                 while not stop_event.is_set():
                     try:
@@ -168,6 +169,9 @@ def create_webhook_app(
                                 base_dir
                             )
                             if discovered:
+                                if db_offline_logged:
+                                    print("📡 [Aegis Direct DB Watchdog] PostgreSQL connection restored. Active monitoring engaged.")
+                                    db_offline_logged = False
                                 hot_table = discovered.get("table") or discovered.get("pg_stat_statements_summary", {}).get("query", "")
                                 current_reads = int(discovered.get("pg_stat_statements_summary", {}).get("seq_tuples_read", 0))
                                 prev_reads = last_seq_snapshot.get(hot_table, 0)
@@ -201,7 +205,14 @@ def create_webhook_app(
                             else:
                                 is_initial_poll = False
                     except Exception as err:
-                        print(f"   ⚠️ [Aegis Direct DB Watchdog] Poll warning: {err}")
+                        err_str = str(err)
+                        if "Connection refused" in err_str or "could not connect to server" in err_str:
+                            if not db_offline_logged:
+                                print(f"   📡 [Aegis Direct DB Watchdog] Standby: Target database at localhost:5432 is offline (connection refused). Watchdog will auto-engage when database starts.")
+                                db_offline_logged = True
+                        else:
+                            first_line = err_str.strip().splitlines()[0] if err_str.strip() else "Unknown error"
+                            print(f"   ⚠️ [Aegis Direct DB Watchdog] Poll notice: {first_line}")
 
                     try:
                         await asyncio.wait_for(stop_event.wait(), timeout=interval)
@@ -231,8 +242,36 @@ def create_webhook_app(
     def serve_dashboard():
         index_file = os.path.join(ui_dir, "index.html")
         if os.path.exists(index_file):
-            return FileResponse(index_file)
+            return FileResponse(
+                index_file,
+                headers={
+                    "Cache-Control": "no-cache, no-store, must-revalidate",
+                    "Pragma": "no-cache",
+                    "Expires": "0"
+                }
+            )
         return HTMLResponse("<h1>Aegis SRE Dashboard</h1>")
+
+    @app.get("/sw.js")
+    @app.get("/service-worker.js")
+    @app.get("/worker.js")
+    def serve_service_worker():
+        # Automatically self-unregisters any zombie service worker left on localhost from prior projects
+        sw_cleanup_js = (
+            "self.addEventListener('install', (e) => self.skipWaiting());\n"
+            "self.addEventListener('activate', (e) => {\n"
+            "  e.waitUntil(\n"
+            "    self.registration.unregister().then(() => self.clients.matchAll({ type: 'window' }))\n"
+            "    .then((clients) => { for (const c of clients) c.navigate(c.url); })\n"
+            "  );\n"
+            "});\n"
+            "self.addEventListener('fetch', (e) => { return; });\n"
+        )
+        return Response(
+            content=sw_cleanup_js,
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
 
     @app.get("/health")
     def health() -> Dict[str, Any]:

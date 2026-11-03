@@ -25,6 +25,12 @@ def test_ui_and_control_plane_endpoints():
     assert "Aegis SRE" in resp_root.text
     assert "Manrope" in resp_root.text
 
+    # 1b. Service worker neutralizer
+    resp_sw = client.get("/sw.js")
+    assert resp_sw.status_code == 200
+    assert "javascript" in resp_sw.headers.get("content-type", "")
+    assert "unregister" in resp_sw.text
+
     # 2. Static asset route
     resp_logo = client.get("/static/logo.png")
     assert resp_logo.status_code == 200
