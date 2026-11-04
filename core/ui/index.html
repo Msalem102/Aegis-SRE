@@ -1794,7 +1794,7 @@
         const res = await fetch('/api/remediate', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ vector: vector })
+          body: JSON.stringify({ vector: vector, force: true })
         });
         const data = await res.json();
         const rec = data.remediation || {};

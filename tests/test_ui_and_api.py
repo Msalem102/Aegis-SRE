@@ -306,3 +306,61 @@ def test_live_event_stream_and_telemetry():
         assert any("data:" in l for l in lines)
 
 
+def test_manual_control_button_bypasses_github_preflight(monkeypatch):
+    """
+    Verifies that manual UI control buttons (/api/remediate) bypass the GitHub pre-flight PR
+    deduplication gate and act immediately, while background webhook alerts (/webhooks/alert)
+    preserve the pre-flight check to conserve tokens.
+    """
+    from core.delivery.github_delivery import GitHubDeliveryEngine
+    import aegis_vector_a_runner
+
+    # 1. Mock GitHub pre-flight to report an active PR #99
+    def mock_find_open(self, repo, incident_id, keywords=None, vector=None):
+        return {
+            "status": "LIVE_GITHUB_PR_ALREADY_OPEN",
+            "pr_number": 99,
+            "html_url": "https://github.com/mock/pull/99",
+            "title": "Fix Database Contention",
+            "branch": "aegis/remediate-db"
+        }
+    monkeypatch.setattr(GitHubDeliveryEngine, "find_open_remediation_pr", mock_find_open)
+
+    # 2. Mock vector A runner to record execution and force flag
+    runner_called = {"called": False, "force": None}
+    def mock_run_a(**kwargs):
+        runner_called["called"] = True
+        runner_called["force"] = kwargs.get("force")
+        return {
+            "status": "REMEDIATED",
+            "incident_id": "INC-TEST-FORCED",
+            "pr": {"pr_number": 100, "html_url": "https://github.com/mock/pull/100"},
+            "sandbox_result": {"baseline_latency_ms": 200, "remediated_latency_ms": 5, "latency_reduction_percent": 97.5}
+        }
+    monkeypatch.setattr(aegis_vector_a_runner, "run_vector_a_remediation", mock_run_a)
+
+    app = create_webhook_app(config_path="mockstore_aegis.yaml", enable_db_watchdog=False)
+    client = TestClient(app)
+
+    # Case A: External Alert arrives via /webhooks/alert -> GitHub check catches it & aborts
+    webhook_payload = {
+        "event_type": "slow_query",
+        "service": "cupertino-coffee-store",
+        "table": "orders",
+        "p99_latency_ms": 1500
+    }
+    resp_webhook = client.post("/webhooks/alert", json=webhook_payload)
+    assert resp_webhook.status_code == 200
+    assert resp_webhook.json().get("status") == "PR_ALREADY_OPEN"
+    assert runner_called["called"] is False
+
+    # Case B: Manual Control Button clicked -> /api/remediate forces action
+    resp_manual = client.post("/api/remediate", json={"vector": "a", "force": True})
+    assert resp_manual.status_code == 200
+    data_manual = resp_manual.json()
+    assert data_manual.get("status") == "COMPLETED"
+    assert runner_called["called"] is True
+    assert runner_called["force"] is True
+
+
+

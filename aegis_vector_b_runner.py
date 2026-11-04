@@ -50,7 +50,8 @@ def run_vector_b_remediation(
     test_target: Optional[str] = None,
     max_retries: Optional[int] = None,
     config_path: str = "aegis.yaml",
-    runtime_error_override: Optional[Dict[str, Any]] = None
+    runtime_error_override: Optional[Dict[str, Any]] = None,
+    force: bool = False
 ) -> Dict[str, Any]:
     print("=" * 78)
     print("🚨 AEGIS SRE: Autonomous API Contract Drift Remediation")
@@ -62,6 +63,11 @@ def run_vector_b_remediation(
         else os.getcwd()
     )
     manifest = AegisConfigLoader.load_or_default(config_path)
+    is_forced = (
+        force
+        or bool(runtime_error_override and (runtime_error_override.get("force") or runtime_error_override.get("discovery_source") == "manual_ui_trigger"))
+        or ("--force" in sys.argv)
+    )
     resolved_code_dir = (
         AegisConfigLoader.resolve_path(config_dir, manifest.project.code_dir)
         if manifest.project.code_dir
@@ -198,26 +204,27 @@ def run_vector_b_remediation(
     # -------------------------------------------------------------
     # Step 3.5: Pre-Flight Idempotency Gate (Save 100% Token & Modal Compute Costs)
     # -------------------------------------------------------------
-    target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
     delivery = GitHubDeliveryEngine()
-    api_name = api_cfg.name if api_cfg else None
-    existing_pr = delivery.find_open_remediation_pr(
-        repo=target_repo,
-        incident_id=incident_error_log["incident_id"],
-        keywords=[api_name] if api_name else None,
-        vector="b"
-    )
-    if existing_pr:
-        return {
-            "status": "PR_ALREADY_OPEN",
-            "incident_id": incident_error_log["incident_id"],
-            "service": manifest.project.service_name,
-            "diagnosis": f"Existing Pull Request #{existing_pr['pr_number']} is already open for this contract drift.",
-            "unified_diff": f"# Active remediation in PR #{existing_pr['pr_number']}\n# {existing_pr['html_url']}",
-            "patch_code": f"# Active remediation in PR #{existing_pr['pr_number']}\n# {existing_pr['html_url']}",
-            "pr": existing_pr,
-            "tokens_saved": True
-        }
+    if not is_forced:
+        target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
+        api_name = api_cfg.name if api_cfg else None
+        existing_pr = delivery.find_open_remediation_pr(
+            repo=target_repo,
+            incident_id=incident_error_log["incident_id"],
+            keywords=[api_name] if api_name else None,
+            vector="b"
+        )
+        if existing_pr:
+            return {
+                "status": "PR_ALREADY_OPEN",
+                "incident_id": incident_error_log["incident_id"],
+                "service": manifest.project.service_name,
+                "diagnosis": f"Existing Pull Request #{existing_pr['pr_number']} is already open for this contract drift.",
+                "unified_diff": f"# Active remediation in PR #{existing_pr['pr_number']}\n# {existing_pr['html_url']}",
+                "patch_code": f"# Active remediation in PR #{existing_pr['pr_number']}\n# {existing_pr['html_url']}",
+                "pr": existing_pr,
+                "tokens_saved": True
+            }
 
     # -------------------------------------------------------------
     # Step 4: Closed-Loop Synthesis & Ephemeral Sandbox Verification (Max 3 Loops)
@@ -330,7 +337,8 @@ def run_vector_b_remediation(
         pr_title=artifacts["pr_title"],
         pr_body=artifacts["post_mortem_markdown"],
         files_to_commit=files_to_commit,
-        base_branch=base_branch
+        base_branch=base_branch,
+        force=is_forced
     )
 
     if pr.get("status") == "LIVE_GITHUB_PR":

@@ -213,40 +213,47 @@ def execute_classified_remediation(
     uid = classified["event_uid"]
     payload = classified["payload"]
     incident_id = payload.get("incident_id") or "INC-ALERT"
+    force = bool(
+        classified.get("force")
+        or payload.get("force")
+        or payload.get("discovery_source") == "manual_ui_trigger"
+    )
 
     # Pre-Flight GitHub PR Idempotency Gate (Saves 100% LLM tokens & Modal micro-VM cost)
-    from core.delivery.github_delivery import GitHubDeliveryEngine
-    target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
-    hot_kw = payload.get("table") or payload.get("api_name")
-    existing_pr = GitHubDeliveryEngine().find_open_remediation_pr(
-        repo=target_repo,
-        incident_id=incident_id,
-        keywords=[hot_kw] if hot_kw else None,
-        vector=vector
-    )
-    if existing_pr:
-        pr_num = existing_pr.get("pr_number")
-        pr_url = existing_pr.get("html_url", "")
-        return {
-            "event_uid": uid,
-            "vector": vector,
-            "incident_id": incident_id,
-            "service": manifest.project.service_name,
-            "title": f"Active Remediation PR #{pr_num} Found",
-            "diagnosis": f"Pre-flight check detected active Pull Request #{pr_num} on GitHub ({pr_url}). Remediation skipped.",
-            "baseline_ms": "Active",
-            "remediated_ms": "PR Open",
-            "speedup_pct": "Idempotent",
-            "before_plan": ["Bottleneck already under remediation"],
-            "after_plan": [f"Active PR: #{pr_num}"],
-            "ddl_script": f"-- Active remediation in PR #{pr_num}\n-- {pr_url}",
-            "patch_code": f"-- Active remediation in PR #{pr_num}\n-- {pr_url}",
-            "pr_number": f"#{pr_num}" if pr_num else "",
-            "pr_url": pr_url,
-            "status": "PR_ALREADY_OPEN",
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "details": existing_pr
-        }
+    # Bypassed when user explicitly triggers remediation via manual UI control buttons
+    if not force:
+        from core.delivery.github_delivery import GitHubDeliveryEngine
+        target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
+        hot_kw = payload.get("table") or payload.get("api_name")
+        existing_pr = GitHubDeliveryEngine().find_open_remediation_pr(
+            repo=target_repo,
+            incident_id=incident_id,
+            keywords=[hot_kw] if hot_kw else None,
+            vector=vector
+        )
+        if existing_pr:
+            pr_num = existing_pr.get("pr_number")
+            pr_url = existing_pr.get("html_url", "")
+            return {
+                "event_uid": uid,
+                "vector": vector,
+                "incident_id": incident_id,
+                "service": manifest.project.service_name,
+                "title": f"Active Remediation PR #{pr_num} Found",
+                "diagnosis": f"Pre-flight check detected active Pull Request #{pr_num} on GitHub ({pr_url}). Remediation skipped.",
+                "baseline_ms": "Active",
+                "remediated_ms": "PR Open",
+                "speedup_pct": "Idempotent",
+                "before_plan": ["Bottleneck already under remediation"],
+                "after_plan": [f"Active PR: #{pr_num}"],
+                "ddl_script": f"-- Active remediation in PR #{pr_num}\n-- {pr_url}",
+                "patch_code": f"-- Active remediation in PR #{pr_num}\n-- {pr_url}",
+                "pr_number": f"#{pr_num}" if pr_num else "",
+                "pr_url": pr_url,
+                "status": "PR_ALREADY_OPEN",
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "details": existing_pr
+            }
 
     problem_name = "Database Contention" if vector == "a" else "API Contract Drift"
     stream_mgr.log(
@@ -258,7 +265,11 @@ def execute_classified_remediation(
     try:
         if vector == "a":
             from aegis_vector_a_runner import run_vector_a_remediation
-            res = run_vector_a_remediation(config_path=config_path, alert_payload_override=payload)
+            res = run_vector_a_remediation(
+                config_path=config_path,
+                alert_payload_override=payload,
+                force=force
+            )
             sb = res.get("sandbox_result") or {}
             baseline_val = sb.get("baseline_latency_ms")
             remediated_val = sb.get("remediated_latency_ms")
@@ -301,7 +312,11 @@ def execute_classified_remediation(
             }
         else:
             from aegis_vector_b_runner import run_vector_b_remediation
-            res = run_vector_b_remediation(config_path=config_path, runtime_error_override=payload)
+            res = run_vector_b_remediation(
+                config_path=config_path,
+                runtime_error_override=payload,
+                force=force
+            )
             pr_info = res.get("pr") or {}
             pr_num = pr_info.get("pr_number")
             pr_url = pr_info.get("html_url") or ""
@@ -959,6 +974,7 @@ def create_webhook_app(
                 "incident_id": f"INC-{time.strftime('%Y%m%d')}-PG-{uuid.uuid4().hex[:4].upper()}",
                 "service": manifest.project.service_name,
                 "discovery_source": "manual_ui_trigger",
+                "force": True,
                 "anomaly_trigger": {
                     "metric": "p99_latency_ms",
                     "threshold": manifest.database.sla_thresholds.p99_latency_ms if (manifest.database and manifest.database.sla_thresholds) else 1000.0
@@ -970,6 +986,7 @@ def create_webhook_app(
             sim_alert = {
                 "vector": "a",
                 "event_uid": f"manual-a-{int(time.time())}",
+                "force": True,
                 "payload": alert_payload
             }
             res = await asyncio.to_thread(_dispatch_remediation, sim_alert)
@@ -980,10 +997,12 @@ def create_webhook_app(
             sim_alert = {
                 "vector": "b",
                 "event_uid": f"manual-b-{int(time.time())}",
+                "force": True,
                 "payload": {
                     "incident_id": f"INC-{time.strftime('%Y%m%d')}-API-{uuid.uuid4().hex[:4].upper()}",
                     "service": manifest.project.service_name,
                     "discovery_source": "manual_ui_trigger",
+                    "force": True,
                     "http_status": 422,
                     "endpoint": str(payload.get("endpoint") or "/api/v1/orders/checkout"),
                     "error_message": str(payload.get("error_message") or "")

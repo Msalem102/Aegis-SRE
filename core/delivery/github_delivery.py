@@ -169,7 +169,8 @@ class GitHubDeliveryEngine:
         pr_body: str,
         files_to_commit: Dict[str, str],
         commit_message: Optional[str] = None,
-        base_branch: Optional[str] = None
+        base_branch: Optional[str] = None,
+        force: bool = False
     ) -> Dict[str, Any]:
         """
         End-to-end atomic delivery workflow:
@@ -201,12 +202,13 @@ class GitHubDeliveryEngine:
             "X-GitHub-Api-Version": "2022-11-28"
         }
 
-        # Check if an existing open Pull Request already exists for this incident
-        existing_pr = self.find_open_remediation_pr(repo, incident_id)
-        if existing_pr:
-            existing_pr["committed_files"] = list(files_to_commit.keys())
-            existing_pr["base_branch"] = base_branch or "main"
-            return existing_pr
+        # Check if an existing open Pull Request already exists for this incident (unless force=True)
+        if not force:
+            existing_pr = self.find_open_remediation_pr(repo, incident_id)
+            if existing_pr:
+                existing_pr["committed_files"] = list(files_to_commit.keys())
+                existing_pr["base_branch"] = base_branch or "main"
+                return existing_pr
 
         try:
             with self._get_client_ctx(timeout=30.0) as client:
