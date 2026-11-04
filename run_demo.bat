@@ -11,6 +11,30 @@ echo.
 set "ROOT_DIR=%~dp0"
 set "MOCKSTORE_DIR=%ROOT_DIR%..\mockStore"
 
+:: 0. First-Time Setup & Credentials Check
+if not exist "%ROOT_DIR%.env" (
+    echo [0/4] Checking environment credentials...
+    echo ===============================================================================
+    echo   [NOTICE: CREDENTIAL SETUP REQUIRED BEFORE RUNNING THE DEMO]
+    echo   A '.env' configuration file was not found.
+    echo   Creating '.env' from '.env.example'...
+    copy "%ROOT_DIR%.env.example" "%ROOT_DIR%.env" >nul
+    echo.
+    echo   Aegis SRE requires credentials in '.env' for live cloud execution:
+    echo     * META_API_KEY       (Meta Muse Spark reasoning core)
+    echo     * MODAL_TOKEN_ID     (Modal Cloud ephemeral micro-VM sandboxes)
+    echo     * MODAL_TOKEN_SECRET (Modal Cloud authentication)
+    echo     * GITHUB_TOKEN       (Atomic GitHub Pull Request delivery)
+    echo.
+    echo   Please open '.env' in an editor and enter your credentials.
+    echo   (You can test your connection anytime with: python aegis_cli.py verify)
+    echo ===============================================================================
+    echo Press any key to continue once '.env' is configured...
+    pause >nul
+) else (
+    echo [0/4] Environment configuration (.env) detected.
+)
+
 :: 1. Database Check
 echo [1/4] Checking PostgreSQL simulation container...
 docker start pg-sim >nul 2>&1

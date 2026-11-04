@@ -169,6 +169,17 @@ GRANT EXECUTE ON FUNCTION pg_stat_statements_reset() TO aegis_ro;
 
 ## Quickstart Guide
 
+> [!IMPORTANT]
+> **First-Time Setup Required for Live Cloud Execution:**
+> Because API keys and private tokens are excluded from Git repositories for security, fresh clones require creating a `.env` file before executing live cloud micro-VMs and Pull Requests:
+> 1. Copy `.env.example` to `.env`: `cp .env.example .env` (or on Windows: `copy .env.example .env`)
+> 2. Populate your credentials: `META_API_KEY`, `MODAL_TOKEN_ID`, `MODAL_TOKEN_SECRET`, and `GITHUB_TOKEN`.
+> 3. Test connectivity across all 3 cloud providers in one command:
+>    ```bash
+>    python aegis_cli.py verify
+>    ```
+> Once verified, proceed to either option below.
+
 ### Option 1: 1-Click Interactive Demo (Recommended)
 
 The repository provides a single-command launcher that initializes the simulation environment (PostgreSQL container, sample store service, and Aegis SRE):
