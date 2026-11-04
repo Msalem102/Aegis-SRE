@@ -30,6 +30,7 @@ Unlike traditional generative AI coding tools that output unverified code snippe
 - [Serverless Deployment (Modal Cloud)](#serverless-deployment-modal-cloud)
 - [CLI Reference](#cli-reference)
 - [Automated Test Suite](#automated-test-suite)
+- [Live Pull Request Showcase](#live-pull-request-showcase)
 - [License](#license)
 
 ---
@@ -334,6 +335,15 @@ python -m pytest tests/ -v
 * **`tests/test_generalization.py`** (2 tests): Validation against unseen logistics schemas and arbitrary database tables.
 * **`tests/test_github_delivery.py`** (6 tests): Atomic Git tree blobs, commit deduplication, unified diff creation, and pre-flight PR idempotency verification.
 * **`tests/test_ui_and_api.py`** (5 tests): Control plane endpoints, sandbox payload transfer integrity, anti-truncation AST patching, live SSE event stream conformance, and manual control button pre-flight bypass.
+
+---
+
+## Live Pull Request Showcase
+
+Explore the dedicated [`pull_requests/`](pull_requests/) directory to inspect the actual Pull Requests autonomously opened by Aegis on GitHub during live test runs against the monitored service:
+
+* **[PR #58 — Database Contention](https://github.com/ahmedharib/mockStore/pull/58):** Synthesized covering B-tree indexes with `CONCURRENTLY` and safe timeouts, achieving a **-98.46% latency reduction** inside Modal Cloud PostgreSQL 16 micro-VMs. Full artifacts in [`pull_requests/PR_58_DATABASE_CONTENTION/`](pull_requests/PR_58_DATABASE_CONTENTION/).
+* **[PR #56 — API Contract Drift](https://github.com/ahmedharib/mockStore/pull/56):** Surgically patched Pydantic models and payment client builders for RoastPay v2, achieving a **100% pytest pass (1/1 in 0.07s)** in Modal Cloud Linux micro-containers. Full artifacts in [`pull_requests/PR_56_API_CONTRACT_DRIFT/`](pull_requests/PR_56_API_CONTRACT_DRIFT/).
 
 ---
 

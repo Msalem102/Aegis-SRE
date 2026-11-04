@@ -1,0 +1,32 @@
+{
+  "sandbox_environment": "MODAL_CLOUD_POSTGRES_SANDBOX",
+  "sandbox_id": "sb-i0gAxdwCAno1Ax8oo7hSNQ",
+  "deterministic_gate_passed": true,
+  "duration_seconds": 4.38,
+  "baseline_metrics": {
+    "latency_ms": 240.0,
+    "local_execution_ms": 16.962,
+    "cpu_percent": 94.2,
+    "query_plan_node": "Hash Join (cost=3531.50, actual_rows=240)",
+    "scan_type": "Seq Scan on orders (120 rows) + Seq Scan on order_items (120,000 rows)"
+  },
+  "remediated_metrics": {
+    "latency_ms": 3.69,
+    "local_execution_ms": 0.261,
+    "cpu_percent": 8.9,
+    "query_plan_node": "Nested Loop (cost=1631.42, actual_rows=240)",
+    "scan_type": "Bitmap Index Scan on idx_orders_customer_id + Index Only Scan on idx_order_items_order_id"
+  },
+  "improvements": {
+    "latency_reduction_percent": 98.46,
+    "cpu_reduction_percent": 90.55,
+    "speedup_ratio": "64.9x"
+  },
+  "safety_checks": {
+    "converted_to_index_scan": true,
+    "is_covering_index_scan": true,
+    "table_locks_detected": false,
+    "statement_timeout_enforced": true,
+    "lock_timeout_enforced": true
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "pr_number": 56,
+  "html_url": "https://github.com/ahmedharib/mockStore/pull/56",
+  "title": "fix(contract): migrate checkout payload to RoastPay v2 schema (amount_cents + billing.address.line1)",
+  "target_repository": "ahmedharib/mockStore",
+  "base_branch": "master",
+  "head_branch": "aegis/fix-api-drift-INC-20261104-API-5ED5D1",
+  "state": "open",
+  "author": "ahmedharib",
+  "created_at": "2026-11-04T23:44:12Z",
+  "incident_id": "INC-20261104-API-5ED5D1",
+  "vector_type": "API_CONTRACT_DRIFT",
+  "test_target": "tests/test_payment_checkout.py",
+  "test_result": "1 passed in 0.07s",
+  "committed_files": [
+    "app/payment_client.py",
+    "app/payment_models.py"
+  ]
+}

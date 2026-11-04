@@ -1,0 +1,17 @@
+{
+  "pr_number": 58,
+  "html_url": "https://github.com/ahmedharib/mockStore/pull/58",
+  "title": "perf(db): add covering indexes on orders.customer_id and order_items.order_id",
+  "target_repository": "ahmedharib/mockStore",
+  "base_branch": "master",
+  "head_branch": "aegis/fix-db-contention-INC-20261105-PG-11D1",
+  "state": "open",
+  "author": "ahmedharib",
+  "created_at": "2026-11-05T00:35:48Z",
+  "incident_id": "INC-20261105-PG-11D1",
+  "vector_type": "DATABASE_CONTENTION",
+  "verified_speedup_percent": 98.46,
+  "committed_files": [
+    "migrations/20261104_add_idx_orders_customer_id.sql"
+  ]
+}
