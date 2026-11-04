@@ -419,6 +419,8 @@ def create_webhook_app(
                 last_handled_time[uid] = time.time()
                 active_uids.discard(uid)
 
+    last_seq_snapshot: Dict[str, int] = {}
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         stop_event = asyncio.Event()
@@ -435,7 +437,6 @@ def create_webhook_app(
             db_cfg = manifest.database
             raw_conn = db_cfg.connection_url or db_cfg.read_only_connection_env
             interval = manifest.observability.watchdog_interval_seconds if manifest.observability else 60
-            last_seq_snapshot: Dict[str, int] = {}
             is_initial_poll = True
             db_offline_logged = False
 
@@ -994,17 +995,27 @@ def create_webhook_app(
         inspector = ReadOnlyDatabaseInspector(read_only_env_var=raw_conn, engine=db_cfg.engine)
         discovered = await asyncio.to_thread(inspector.discover_slow_query_telemetry, base_dir)
         if discovered:
-            reads = int(discovered.get("pg_stat_statements_summary", {}).get("seq_tuples_read", 0))
+            hot_table = discovered.get("table") or discovered.get("pg_stat_statements_summary", {}).get("query", "")
+            current_reads = int(discovered.get("pg_stat_statements_summary", {}).get("seq_tuples_read", 0))
+            prev_reads = last_seq_snapshot.get(hot_table, 0)
+            delta = max(0, current_reads - prev_reads)
+            last_seq_snapshot[hot_table] = current_reads
+
             anomaly = discovered.get("anomaly_trigger", {})
             current_lat = float(anomaly.get("current_value", 0.0))
+            sla_threshold = float(anomaly.get("threshold", 1000.0))
+            is_surge = delta > 0 or current_lat >= sla_threshold
             return {
-                "surge_detected": True,
-                "tuples_read": reads,
+                "surge_detected": is_surge,
+                "delta_tuples": delta,
+                "tuples_read": delta,
+                "cumulative_tuples": current_reads,
                 "latency_ms": current_lat,
                 "query": discovered.get("pg_stat_statements_summary", {}).get("query"),
-                "discovery_source": discovered.get("discovery_source", "pg_stat_statements")
+                "discovery_source": discovered.get("discovery_source", "pg_stat_statements"),
+                "table": hot_table
             }
-        return {"surge_detected": False, "detail": "No sequential scan spikes detected", "current_reads": 0}
+        return {"surge_detected": False, "detail": "No sequential scan spikes detected", "current_reads": 0, "delta_tuples": 0, "cumulative_tuples": 0}
 
     @app.post("/webhooks/alert")
     async def ingest_alert_webhook(

@@ -288,9 +288,11 @@ class ReadOnlyDatabaseInspector:
                 discovered_sql = f"SELECT {proj} FROM {hot_table} WHERE {filter_col} = $1{order_sql} LIMIT 50"
 
             # Verify on live database whether discovered query actually suffers from sequential scan
+            # We explicitly pass analyze=False to prevent PostgreSQL from physically executing the unindexed
+            # query during routine telemetry polling, which would inadvertently increment seq_tup_read.
             measured_latency_ms = 240.0
             try:
-                plan_check = self.inspect_outage_context(discovered_sql)
+                plan_check = self.inspect_outage_context(discovered_sql, analyze=False)
                 if not plan_check.get("explain_plan", {}).get("is_sequential_scan", True):
                     # Table is already indexed for this query, no unindexed bottleneck
                     return None
@@ -387,16 +389,23 @@ class ReadOnlyDatabaseInspector:
         names = cls._extract_table_names(offending_query)
         return names[0] if names else "unknown_table"
 
-    def inspect_outage_context(self, offending_query: str, sample_params: Optional[List[Any]] = None) -> Dict[str, Any]:
+    def inspect_outage_context(
+        self,
+        offending_query: str,
+        sample_params: Optional[List[Any]] = None,
+        analyze: bool = False
+    ) -> Dict[str, Any]:
         """
         Connects to the database in strictly READ-ONLY mode to inspect:
         - Target table schema, column definitions, and reconstructed DDL
         - Existing indexes
-        - Live EXPLAIN execution plan and baseline query execution latency
+        - Live EXPLAIN execution plan and baseline query execution latency.
+          Set analyze=False during routine polling/telemetry discovery to inspect the
+          query plan tree via EXPLAIN without physically executing the unindexed query.
         """
         if self.is_postgres:
             try:
-                return self._inspect_postgres_readonly(offending_query, sample_params)
+                return self._inspect_postgres_readonly(offending_query, sample_params, analyze=analyze)
             except Exception as pg_err:
                 err_s = str(pg_err).lower()
                 if "connection refused" in err_s or "could not connect to server" in err_s or "failed: connection" in err_s:
@@ -672,10 +681,17 @@ class ReadOnlyDatabaseInspector:
 
         return columns, indexes
 
-    def _inspect_postgres_readonly(self, offending_query: str, sample_params: Optional[List[Any]]) -> Dict[str, Any]:
+    def _inspect_postgres_readonly(
+        self,
+        offending_query: str,
+        sample_params: Optional[List[Any]] = None,
+        analyze: bool = False
+    ) -> Dict[str, Any]:
         """
         Inspects a live PostgreSQL database with driver-enforced `readonly=True` session protection,
         normalizing PostgreSQL's JSON EXPLAIN tree into Aegis's structured telemetry schema.
+        When analyze=False, executes EXPLAIN (FORMAT JSON) without ANALYZE to prevent running
+        the unindexed query and incrementing pg_stat_user_tables.seq_tup_read.
         """
         import psycopg2
         conn = psycopg2.connect(self.db_url)
@@ -704,11 +720,14 @@ class ReadOnlyDatabaseInspector:
                 cur.execute(f'SELECT COUNT(*) FROM "{table_name}"')
                 row_count = int(cur.fetchone()[0])
 
-            # 4. Bind parameters and execute live EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
+            # 4. Bind parameters and execute live EXPLAIN
             bound_sql = self._bind_query_params(offending_query, sample_params)
             bound_sql = self._auto_bind_unbound_placeholders(bound_sql, table_name, columns, cur)
 
-            cur.execute(f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {bound_sql}")
+            if analyze:
+                cur.execute(f"EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {bound_sql}")
+            else:
+                cur.execute(f"EXPLAIN (FORMAT JSON) {bound_sql}")
             explain_raw = cur.fetchall()[0][0]
         finally:
             cur.close()
@@ -723,10 +742,14 @@ class ReadOnlyDatabaseInspector:
         is_seq_scan = has_seq_scan and not has_index_scan
         actual_rows = int(top_plan.get("Actual Rows", 0))
 
-        # Preserve real measured Postgres Execution Time; scale production equivalent if dataset is cached in local RAM
-        prod_equiv_ms = round(exec_time_ms, 2) if exec_time_ms >= 250.0 else (
-            round(max(exec_time_ms * 35.0, exec_time_ms), 2) if is_seq_scan else round(exec_time_ms, 2)
-        )
+        # Preserve real measured Postgres Execution Time if analyzed; scale production equivalent if dataset is cached in local RAM
+        if exec_time_ms > 0:
+            prod_equiv_ms = round(exec_time_ms, 2) if exec_time_ms >= 250.0 else (
+                round(max(exec_time_ms * 35.0, exec_time_ms), 2) if is_seq_scan else round(exec_time_ms, 2)
+            )
+        else:
+            # Plan-only mode (analyze=False): avoid Heisenberg observer effect on pg_stat_user_tables
+            prod_equiv_ms = 240.0 if is_seq_scan else 4.0
 
         return {
             "engine": "postgres",

@@ -1777,10 +1777,12 @@
       try {
         const res = await fetch('/api/watchdog/scan', { method: 'POST' });
         const data = await res.json();
-        if (data.surge_detected) {
-          logToConsole(`[Watchdog] Sequential scan bottleneck detected (+${data.tuples_read} tuples read, source: ${data.discovery_source || 'telemetry'})!`, 'surge');
+        const delta = Number(data.delta_tuples ?? data.tuples_read ?? 0);
+        const cumulative = Number(data.cumulative_tuples ?? data.current_reads ?? 0);
+        if (data.surge_detected && delta > 0) {
+          logToConsole(`[Watchdog] Sequential scan bottleneck detected (+${delta.toLocaleString()} tuples read, source: ${data.discovery_source || 'telemetry'})!`, 'surge');
           const tuplesEl = document.getElementById('kpi-tuples-read');
-          if (tuplesEl) tuplesEl.textContent = `+${data.tuples_read} Scans`;
+          if (tuplesEl) tuplesEl.textContent = `+${delta.toLocaleString()} Tuples`;
           const watchdogPill = document.getElementById('watchdog-state-pill');
           if (watchdogPill) {
             watchdogPill.textContent = 'SURGE DETECTED';
@@ -1791,9 +1793,14 @@
             if (qEl) qEl.textContent = data.query;
           }
         } else {
-          logToConsole(`[Watchdog] Polled database: ${data.detail || 'No abnormal scan surges detected'} (live reads: ${data.current_reads || 0}).`, 'info');
+          logToConsole(`[Watchdog] Polled database: ${data.detail || 'No abnormal scan surges detected'} (cumulative: ${cumulative.toLocaleString()} tuples read).`, 'info');
           const tuplesEl = document.getElementById('kpi-tuples-read');
           if (tuplesEl) tuplesEl.textContent = '0 Surges (Clean)';
+          const watchdogPill = document.getElementById('watchdog-state-pill');
+          if (watchdogPill) {
+            watchdogPill.textContent = 'ACTIVE (RO)';
+            watchdogPill.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-field/15 text-field leading-none';
+          }
         }
       } catch (err) {
         logToConsole(`[Notice] Watchdog poll notice: ${err}`, 'info');
