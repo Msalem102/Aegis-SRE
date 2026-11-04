@@ -78,16 +78,38 @@ def flatten_plan(node):
     return nodes, has_seq, has_idx, has_cov
 
 def split_sql_statements(ddl_script):
+    cleaned_script = re.sub(r"DO\s+\$.*?\$\s*BEGIN.*?END\s*\$.*?\$;", "", ddl_script, flags=re.S | re.I)
     stmts = []
-    for chunk in ddl_script.split(";"):
+    for chunk in cleaned_script.split(";"):
         lines = [ln for ln in chunk.splitlines() if not ln.strip().startswith("--")]
         cleaned = "\n".join(lines).strip()
-        if cleaned:
+        if cleaned and not re.match(r"^(GRANT|REVOKE)\b", cleaned, flags=re.I):
             stmts.append(cleaned)
     return stmts
 
+def load_sandbox_payload():
+    if len(sys.argv) >= 3 and sys.argv[1] == "--payload-file":
+        p_path = sys.argv[2]
+        if os.path.isfile(p_path):
+            with open(p_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    if len(sys.argv) >= 2 and os.path.isfile(sys.argv[1]):
+        with open(sys.argv[1], "r", encoding="utf-8") as f:
+            return json.load(f)
+    for default_path in ("/root/payload.json", "/tmp/payload.json", "/telemetry/payload.json"):
+        if os.path.isfile(default_path):
+            with open(default_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    if not sys.stdin.isatty():
+        raw_stdin = sys.stdin.read().strip()
+        if raw_stdin:
+            return json.loads(raw_stdin)
+    if len(sys.argv) >= 2:
+        return json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+    raise RuntimeError("No sandbox payload found via mounted file or stdin.")
+
 def main():
-    payload = json.loads(base64.b64decode(sys.argv[1]).decode("utf-8"))
+    payload = load_sandbox_payload()
     catalog = payload["table_catalog"]
     table_name = catalog["table_name"]
     columns = catalog.get("columns", [])
@@ -467,15 +489,6 @@ class DatabaseSandbox:
             "seed_rows": 60000,
             "min_speedup_percent": self.min_speedup_percent
         }
-        payload_b64 = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
-        runner_b64 = base64.b64encode(MODAL_POSTGRES_RUNNER.encode("utf-8")).decode("ascii")
-
-        bootstrap = (
-            "import base64, subprocess, sys; "
-            f"open('/tmp/pg_runner.py', 'wb').write(base64.b64decode('{runner_b64}')); "
-            f"res = subprocess.run([sys.executable, '-u', '/tmp/pg_runner.py', '{payload_b64}']); "
-            "sys.exit(res.returncode)"
-        )
 
         vol = None
         try:
@@ -485,13 +498,32 @@ class DatabaseSandbox:
 
         vol_mounts = {"/telemetry": vol} if vol is not None else {}
 
-        sb = modal.Sandbox.create(
-            "python3", "-u", "-c", bootstrap,
-            image=image,
-            app=app,
-            timeout=self.timeout_seconds,
-            volumes=vol_mounts
-        )
+        # Stage runner script and JSON payload into an isolated temporary directory and mount
+        # directly into the container filesystem (eliminating CLI ARG_MAX limits and process tree exposure).
+        staging_dir = tempfile.mkdtemp(prefix="aegis_pg_sandbox_")
+        try:
+            runner_file = os.path.join(staging_dir, "pg_runner.py")
+            payload_file = os.path.join(staging_dir, "payload.json")
+            with open(runner_file, "w", encoding="utf-8") as rf:
+                rf.write(MODAL_POSTGRES_RUNNER)
+            with open(payload_file, "w", encoding="utf-8") as pf:
+                json.dump(payload, pf)
+
+            mounted_image = (
+                image
+                .add_local_file(runner_file, "/root/pg_runner.py")
+                .add_local_file(payload_file, "/root/payload.json")
+            )
+
+            sb = modal.Sandbox.create(
+                "python3", "-u", "/root/pg_runner.py", "--payload-file", "/root/payload.json",
+                image=mounted_image,
+                app=app,
+                timeout=self.timeout_seconds,
+                volumes=vol_mounts
+            )
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
         dash_url = None
         try:

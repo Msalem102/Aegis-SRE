@@ -19,9 +19,10 @@ from dotenv import load_dotenv
 from core.db.safety_guard import DDLSafetyGuard
 from core.telemetry.cost_tracker import CostTracker
 
-if sys.stdout.encoding != "utf-8":
+if getattr(sys.stdout, "encoding", "utf-8") != "utf-8":
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
@@ -76,7 +77,9 @@ class MuseDBClient:
             "2. Formulate the optimal index column ordering (equality predicates first, sort keys next, "
             "and INCLUDE covering columns if beneficial for an Index Only Scan).\n"
             "3. Synthesize zero-downtime PostgreSQL DDL: mandate CREATE INDEX CONCURRENTLY IF NOT EXISTS "
-            "prefixed with SET statement_timeout = '30s'; and SET lock_timeout = '5s';.\n\n"
+            "prefixed with SET statement_timeout = '30s'; and SET lock_timeout = '5s';.\n"
+            "4. If the query contains a JOIN across multiple tables, include CREATE INDEX CONCURRENTLY IF NOT EXISTS "
+            "statements for BOTH the filtered table and the joined foreign-key column(s) in `ddl_script`.\n\n"
             "OUTPUT STRICT JSON ONLY:\n"
             "{\n"
             '  "plan_tree_diagnosis": "Detailed technical root-cause analysis of the query bottleneck",\n'
@@ -101,6 +104,7 @@ class MuseDBClient:
         if self.api_key and self.api_key != "MOCK":
             try:
                 response = self._call_live_api(system_prompt, json.dumps(user_prompt, indent=2), task_name="synthesize_database_remediation")
+                response["ddl_script"] = self._ensure_join_indexes_covered(query, response.get("ddl_script", ""))
                 is_safe, violations = DDLSafetyGuard.validate_ddl(response.get("ddl_script", ""))
                 if not is_safe:
                     response["ddl_script"] = DDLSafetyGuard.enforce_safety_envelope(response.get("ddl_script", ""))
@@ -163,6 +167,37 @@ class MuseDBClient:
                 content = "\n".join(lines).strip()
 
             return json.loads(content)
+
+    @staticmethod
+    def _ensure_join_indexes_covered(query: str, ddl_script: str) -> str:
+        """
+        Ensures that if a query contains a JOIN on a foreign key column (e.g. JOIN order_items i ON o.order_id = i.order_id),
+        and the synthesized DDL only indexed the primary table, the joined table's foreign key is also indexed.
+        """
+        if not ddl_script or "join" not in query.lower():
+            return ddl_script
+        try:
+            import sqlglot
+            from sqlglot import exp
+            parsed = sqlglot.parse_one(query, read="postgres")
+            extra_ddls = []
+            ddl_lower = ddl_script.lower()
+            for join_node in parsed.find_all(exp.Join):
+                join_tbl_node = join_node.this
+                join_tbl = getattr(join_tbl_node, "name", None) or str(join_tbl_node).split()[-1].strip('"')
+                join_tbl_alias = str(getattr(join_tbl_node, "alias", "") or join_node.alias or join_tbl)
+                for col_node in join_node.find_all(exp.Column):
+                    c_table = col_node.table
+                    c_name = col_node.name
+                    if (c_table and c_table in (join_tbl, join_tbl_alias)) or (not c_table and c_name.endswith("_id")):
+                        if f"on {join_tbl.lower()}" not in ddl_lower and f'on "{join_tbl.lower()}"' not in ddl_lower:
+                            idx_name = f"idx_{join_tbl}_{c_name}".lower()
+                            extra_ddls.append(f"CREATE INDEX CONCURRENTLY IF NOT EXISTS {idx_name} ON {join_tbl} ({c_name});")
+            if extra_ddls:
+                return ddl_script.rstrip() + "\n" + "\n".join(extra_ddls)
+        except Exception:
+            pass
+        return ddl_script
 
     def _generic_sql_ast_reasoner(
         self,

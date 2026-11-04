@@ -3,6 +3,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Meta Muse Spark](https://img.shields.io/badge/Meta%20AI-Muse%20Spark%201.2-purple.svg)](https://api.meta.ai/)
 [![Modal Cloud Serverless](https://img.shields.io/badge/Serverless-Modal%20Scale--to--Zero-brightgreen.svg)](https://modal.com/)
+[![Tests Passing](https://img.shields.io/badge/tests-22%2F22%20passing-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Hackathon: Meta Global AI](https://img.shields.io/badge/Hackathon-Meta%20Global%20AI%20Developer-orange.svg)](https://metaglobalai.devpost.com/)
 
@@ -21,6 +22,9 @@ Offline simulations and local SQLite fallbacks have been permanently removed. Ae
 
 ```
        [ Production Alert Webhook OR Live PostgreSQL Watchdog Surge ]
+                                     │
+                                     ▼
+            [ Pre-Flight GitHub PR Idempotency Gate ] ──> (PR already open? Skip LLM & save 100% tokens!)
                                      │
                                      ▼
             [ Read-Only Telemetry & Catalog ] (readonly=True, ZERO prod write risk)
@@ -50,7 +54,7 @@ Offline simulations and local SQLite fallbacks have been permanently removed. Ae
 ## ⚡ Two Remediation Vectors
 
 ### 1. Vector A: Database Performance & Zero-Downtime Indexing
-* **Trigger:** Sequential scan saturation, CPU spikes (>80%), HTTP 504 timeouts, or P99 latency breaches (>1000ms).
+* **Trigger:** Sequential scan surges, CPU spikes (>80%), HTTP 504 timeouts, or P99 latency breaches (>1000ms).
 * **Detection:** Direct read-only inspection via `pg_stat_statements` and `pg_stat_user_tables` sequential scan analysis + AST code scanner.
 * **Autonomous Query Discovery:** Aegis scans target Python codebases via AST to locate the offending `SELECT ... FROM ... WHERE ...` queries (zero hardcoded SQL).
 * **Safety:** Strictly read-only connection enforced at driver session level (`readonly=True`).
@@ -69,8 +73,40 @@ Offline simulations and local SQLite fallbacks have been permanently removed. Ae
   2. *Single-Spec Live Discovery:* Ingests active upstream OpenAPI contract without requiring a baseline.
   3. *Pure Error-Driven Schema Inference:* Operates with zero spec files, inferring payload requirements directly from HTTP 422 error messages and stack traces.
 * **Dependency Mapping:** `DependencyMapper` uses Python AST to trace caller files, data models, and serializers across the codebase.
+* **Anti-Truncation Surgical Patching:** Parses modified AST blocks directly into target source files, eliminating context truncation on large codebases.
 * **Verification:** Runs `pytest` inside an ephemeral Modal Cloud Linux micro-container with automatic dependency discovery from `requirements.txt` or `pyproject.toml`.
 * **Delivery:** Generates unified diffs, authors an incident post-mortem, and opens a GitHub PR with modified source files.
+
+---
+
+## 🖥️ SRE Control Plane & Real-Time Event Stream
+
+Aegis includes an interactive, **Supabase-styled dark emerald web dashboard** (`http://localhost:8080`) built on an 8px design grid:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│  🛡️ ahmedharib's Org / [cupertino-coffee-store ▾] / master  PRODUCTION                 │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│  [Query SLA: Target < 1000ms]  [Telemetry Watchdog: ACTIVE]  [Remediations: Modal]    │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│  Autonomous Remediation Controls:                                                      │
+│    [Fix Database Contention (Vector A)]  [Fix API Contract Drift (Vector B)]  [Scan DB]│
+│                                                                                        │
+│  Live Latency Visualizer (Production Baseline vs. Modal Ephemeral Micro-VM):           │
+│  Baseline:   ████████████████████████████████████████ 242.87 ms (Seq Scan Contention) │
+│  Remediated: █ 4.37 ms (-98.2% Faster / 100% Passed)                                  │
+│                                                                                        │
+│  Live Event Stream & Watchdog Telemetry (SSE Server-Sent Events):                      │
+│  [15:12:04] [watchdog] Active unindexed sequential scan surge detected (+50000 tuples)│
+│  [15:12:05] [meta]     Meta Muse Spark synthesizing zero-downtime index migration...  │
+│  [15:12:09] [sandbox]  Modal Cloud micro-VM verified 98.2% latency drop in 5.11s!     │
+│  [15:12:10] [delivery] Opened ready-to-merge GitHub Pull Request #33                  │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+* **Live Multi-App `.yaml` Switcher:** Seamlessly switch between microservices or create new app configurations directly via UI modal.
+* **Real-Time SSE Event Stream:** Console output (`sys.stdout`/`sys.stderr`) is teed directly to the web dashboard via Server-Sent Events.
+* **Interactive Post-Mortem Reports:** Inspect root causes, before/after EXPLAIN plans, and candidate diffs with 1-click links to GitHub Pull Requests.
 
 ---
 
@@ -83,8 +119,8 @@ Developers and companies **never need to run a 24/7 dedicated VPS or listener se
    - When your app catches an upstream `422` contract failure or `504` DB timeout and `POST`s a JSON alert, Modal wakes the endpoint, spawns an asynchronous `remediate_incident_worker` cloud job in `<50ms`, verifies the fix in an isolated micro-VM, opens a GitHub PR, and scales back down to zero.
 2. **Scheduled Read-Only DB Watchdog (`modal.Period(minutes=30)`):**
    - Automatically wakes up every 30 minutes on Modal Cloud, inspects `DATABASE_RO_URL` (`readonly=True`) for unindexed sequential scans breaching SLA thresholds, opens a verified SQL index PR if needed, and scales back to zero.
-3. **Optional GitHub Actions Scheduled Audit (Zero Extra Accounts):**
-   - Teams can also run `python aegis_cli.py run --vector all` on a GitHub Actions `schedule` cron or CI failure trigger.
+3. **Pre-Flight GitHub PR Idempotency Gate:**
+   - Detects if an active PR is already open for the incident signature before calling the Meta model or provisioning cloud compute, saving 100% of token and compute costs on repeated alerts.
 
 Deploy serverless in one command:
 ```bash
@@ -103,7 +139,7 @@ During end-to-end testing against the live `cupertino-coffee-store` production d
 | **Execution Latency** | **242.87 ms** | **4.37 ms** | **-98.2% Latency Reduction** |
 | **Host CPU Utilization** | ~94.2% | ~9.1% | **-90.3% CPU Relief** |
 | **Table Lock Impact** | N/A | **0 ms Lock Wait** | Zero Downtime via `CONCURRENTLY` + `lock_timeout='5s'` |
-| **Sandbox Environment** | N/A | Modal Cloud PostgreSQL 16 Micro-VM (`sb-qd3aPZffOWJpvoAEJ20N4K`) in **5.11s** | Deterministic Cloud Verification |
+| **Sandbox Environment** | N/A | Modal Cloud PostgreSQL 16 Micro-VM in **5.11s** | Deterministic Cloud Verification |
 | **Meta Model Speed** | N/A | DDL Synthesis: **9.32s** \| Post-Mortem Report: **13.25s** | Real-time Live Token Generation |
 | **Deterministic Gate** | N/A | **PASSED** (required $\ge$ 80%) | Auto-Approved for Pull Request |
 
@@ -120,17 +156,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### Step 2: Create Read-Only PostgreSQL Credentials (Zero Production Write Risk)
-Run once on your PostgreSQL database (Supabase, Neon, RDS, or self-hosted) so Aegis can inspect query plans and catalog stats without write permissions:
-```sql
-CREATE ROLE aegis_ro WITH LOGIN PASSWORD 'strong_readonly_password';
-GRANT CONNECT ON DATABASE your_db TO aegis_ro;
-GRANT USAGE ON SCHEMA public TO aegis_ro;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO aegis_ro;
-GRANT pg_read_all_stats TO aegis_ro;
-```
-
-### Step 3: Configure `.env`
+### Step 2: Configure `.env`
 Copy `.env.example` to `.env` and fill in credentials:
 ```bash
 META_API_KEY=LLM_...
@@ -140,79 +166,28 @@ META_MODEL_NAME=muse-spark-1.2
 MODAL_TOKEN_ID=ak-...
 MODAL_TOKEN_SECRET=as-...
 
-DATABASE_RO_URL=postgresql://aegis_ro:strong_readonly_password@your-db-host:5432/your_db
+DATABASE_RO_URL=postgresql://app_user:app_secret@localhost:5432/postgres
 GITHUB_TOKEN=ghp_your_github_personal_access_token
 ```
 
-Verify connectivity:
+Verify connectivity to all 3 core external integrations:
 ```bash
-# Verify all 3 core external integrations (Meta Model API, Modal Cloud, GitHub)
-python verify_apis.py
-# or via CLI:
 python aegis_cli.py verify
 ```
 
-### Step 4: Initialize & Audit `aegis.yaml`
-Generate a starter `aegis.yaml` manifest for your service and run the architectural contract audit:
+### Step 3: Run the 1-Click Interactive Demo
+Launch the complete simulation (Cupertino Coffee Store on `:8000` + Aegis Control Plane on `:8080`):
 ```bash
-python aegis_cli.py init --output aegis.yaml
-python aegis_cli.py check --config aegis.yaml
+# Windows
+run_demo.bat
+# or PowerShell
+.\run_demo.ps1
 ```
 
-Example `aegis.yaml`:
-```yaml
-version: "1.0"
-
-project:
-  service_name: "cupertino-coffee-store"
-  repository: "meta-sre/cupertino-coffee"
-  default_branch: "main"
-
-observability:
-  provider: "direct"
-  watchdog_interval_seconds: 60
-
-database:
-  engine: "postgres"
-  read_only_connection_env: "DATABASE_RO_URL"
-  require_read_only_mode: true
-  schema_path: "auto"        # Introspects live PostgreSQL catalog metadata
-  telemetry_source: "auto"   # Discovers slow queries via pg_stat_user_tables delta reads
-  migration_output_dir: "migrations"
-  sla_thresholds:
-    p99_latency_ms: 1000.0
-    max_cpu_percent: 80.0
-    min_sandbox_speedup_percent: 80.0
-
-upstream_apis:
-  - name: "coffee_payment_gateway"
-    spec_url: "contracts/payment_gateway_v2.json"
-    client_repo_root: "."
-    code_root: "app"
-    test_target: "tests"
-    max_healing_retries: 3
-
-sandbox:
-  provider: "modal"
-  app_name: "aegis-sre"
-  timeout_seconds: 120
+Or start the Aegis SRE Web UI directly:
+```bash
+python aegis_cli.py ui --config mockstore_aegis.yaml
 ```
-
-### Step 5: Run Aegis SRE
-* **Option A — Run Local Listener with Direct DB Watchdog:**
-  ```bash
-  python aegis_cli.py listen --config aegis.yaml --port 8080 --watchdog
-  ```
-* **Option B — Deploy Serverless Scale-to-Zero Daemon to Modal Cloud:**
-  ```bash
-  python aegis_cli.py deploy --config aegis.yaml
-  ```
-* **Option C — Trigger On-Demand CLI Remediation:**
-  ```bash
-  python aegis_cli.py run --vector a --config aegis.yaml
-  python aegis_cli.py run --vector b --config aegis.yaml
-  python aegis_cli.py run --vector all --config aegis.yaml
-  ```
 
 ---
 
@@ -220,11 +195,13 @@ sandbox:
 
 | Command | Purpose |
 | :--- | :--- |
+| `python aegis_cli.py ui [--config <path>]` | **Launches the full interactive SRE Control Plane Web Dashboard & auto-opens browser.** |
 | `python aegis_cli.py check [--config <path>]` | Audits integration contract compliance (metadata, read-only mode, schema, sandbox). |
 | `python aegis_cli.py init [--output <path>]` | Generates a clean, validated `aegis.yaml` starter manifest for a new repository. |
 | `python aegis_cli.py run --vector [a\|b\|all]` | Runs on-demand autonomous remediation for database (A), API contracts (B), or both. |
 | `python aegis_cli.py listen [--port 8080] [--watchdog]` | Runs local webhook daemon (`/webhooks/alert`) and optional direct PostgreSQL watchdog. |
 | `python aegis_cli.py deploy [--config <path>]` | Deploys Aegis SRE as a scale-to-zero serverless daemon on Modal Cloud (`$0.00/mo` idle). |
+| `python aegis_cli.py verify [--config <path>]` | Runs live pre-flight checks against Meta Model API, Modal Cloud, and GitHub Push access. |
 
 ---
 
@@ -235,17 +212,21 @@ Run the full automated verification suite:
 python -m pytest tests/ -v
 ```
 
-16/16 tests passing:
-* `test_aegis_config.py`: Architecture compliance, read-only enforcement, starter manifest roundtrip.
-* `test_external_blind_readiness.py`: External repository isolation, POSIX commit paths, alert normalization, dynamic dependency mapping.
-* `test_generalization.py`: Unseen logistics schemas, unseen database tables, non-destructive DDL safety policies.
-* `test_github_delivery.py`: Atomic Git tree, blob, commit, and Pull Request creation with unified diffs.
+**22/22 tests passing across 5 test suites:**
+* `tests/test_aegis_config.py` (5 tests): Architecture contract compliance, read-only driver enforcement, starter template roundtrips.
+* `tests/test_external_blind_readiness.py` (5 tests): External repo isolation, POSIX commit keys, alert event normalization, dynamic dependency mapping, and EXPLAIN plan flattening.
+* `tests/test_generalization.py` (2 tests): Unseen logistics OpenAPI specs and unseen database tables with non-destructive DDL safety policies.
+* `tests/test_github_delivery.py` (6 tests): Atomic Git tree blobs, Pull Request deduplication, unified diff generation, and **Pre-Flight PR Idempotency Gate**.
+* `tests/test_ui_and_api.py` (4 tests): SRE Control Plane endpoints, sandbox payload file transfer, anti-truncation AST patching, and **Live SSE Event Stream compliance**.
 
 ---
 
 ## 🏆 Hackathon Submission Highlights
 
-1. **Meta Muse Spark Core:** Powers deep root-cause diagnosis, non-blocking PostgreSQL index synthesis, API contract payload reconciliation, and model-authored Pull Request post-mortems.
-2. **Modal Cloud Infrastructure:** Powers both ephemeral verification micro-VMs (PostgreSQL 16 + Linux pytest sandboxes) and Aegis's own scale-to-zero continuous serverless daemon (`$0.00/month` idle cost).
-3. **Domain-Agnostic Design:** Operates on unseen databases and APIs with zero hardcoded table, column, or field names.
-4. **Safety First:** Strictly read-only production database sessions (`readonly=True`), non-destructive `CONCURRENTLY` DDL guards, and zero-write external repository isolation.
+1. **Meta Muse Spark Core:** Powers root-cause diagnosis, non-blocking PostgreSQL index synthesis, API contract payload reconciliation, and model-authored Pull Request post-mortems.
+2. **Deterministic Sandbox Mandate:** Refuses to deliver untested code. Every SQL migration and code patch is validated in an ephemeral Modal Cloud micro-VM (PostgreSQL 16 / Linux pytest) before GitHub delivery.
+3. **Pre-Flight GitHub PR Idempotency Gate:** Eliminates redundant LLM token costs and cloud compute by detecting open remediation PRs before triggering model inference.
+4. **Zero-Idle-Cost Continuous Operation:** Scale-to-zero serverless daemon on Modal Cloud (`$0.00/month` idle cost).
+5. **Interactive SRE Control Plane:** Supabase-styled dark emerald dashboard with real-time SSE event streaming, 8px grid alignment, and dynamic multi-app `.yaml` switcher.
+6. **Domain-Agnostic Design:** Operates on unseen databases and APIs with zero hardcoded table, column, or field names.
+7. **Production Safety Guarantees:** Strictly read-only production database sessions (`readonly=True`), non-destructive `CONCURRENTLY` DDL guards (`lock_timeout='5s'`), and zero-write external repository isolation.

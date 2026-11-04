@@ -165,3 +165,37 @@ def test_live_github_pr_already_open_deduplication():
     assert res["pr_number"] == 12
     assert res["html_url"] == "https://github.com/my-org/novacart-store/pull/12"
     assert "already exists" in res["message"]
+
+
+def test_find_open_remediation_pr_preflight():
+    """Asserts that find_open_remediation_pr detects open PRs by incident_id or keywords before LLM execution."""
+    def mock_transport(request: httpx.Request) -> httpx.Response:
+        url_str = str(request.url)
+        if "repos/my-org/novacart-store/pulls" in url_str:
+            return httpx.Response(200, json=[{
+                "number": 42,
+                "html_url": "https://github.com/my-org/novacart-store/pull/42",
+                "title": "fix(db): add index on orders (INC-20261104-PG-SEQSCAN)",
+                "body": "Resolves unindexed sequential scan on orders table.",
+                "head": {"ref": "aegis/remediate-inc-20261104-pg-seqscan-7f8a9b"}
+            }])
+        return httpx.Response(404, json={})
+
+    mock_client = httpx.Client(transport=httpx.MockTransport(mock_transport))
+    engine = GitHubDeliveryEngine(github_token="ghp_test_token_123", client=mock_client)
+
+    # 1. Matches by exact incident ID
+    pr_match = engine.find_open_remediation_pr("my-org/novacart-store", "INC-20261104-PG-SEQSCAN")
+    assert pr_match is not None
+    assert pr_match["pr_number"] == 42
+    assert pr_match["html_url"] == "https://github.com/my-org/novacart-store/pull/42"
+
+    # 2. Matches by keyword (e.g. table name 'orders')
+    pr_match_kw = engine.find_open_remediation_pr("my-org/novacart-store", "INC-UNKNOWN", keywords=["orders"])
+    assert pr_match_kw is not None
+    assert pr_match_kw["pr_number"] == 42
+
+    # 3. Returns None when no match found
+    pr_none = engine.find_open_remediation_pr("my-org/novacart-store", "INC-UNRELATED", keywords=["payments"])
+    assert pr_none is None
+

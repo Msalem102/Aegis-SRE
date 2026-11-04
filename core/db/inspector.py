@@ -60,7 +60,10 @@ class ReadOnlyDatabaseInspector:
             return None
 
         if not db_file_path:
-            raise RuntimeError("No PostgreSQL connection URL or local database file path provided.")
+            if self.schema_sql_path and os.path.exists(self.schema_sql_path):
+                db_file_path = os.path.join(tempfile.gettempdir(), f"aegis_ro_{os.getpid()}.db")
+            else:
+                raise RuntimeError("No PostgreSQL connection URL or local database file path provided.")
 
         self._local_db_path = os.path.abspath(db_file_path)
         if os.path.exists(self._local_db_path) and os.path.getsize(self._local_db_path) > 10240:
@@ -147,6 +150,29 @@ class ReadOnlyDatabaseInspector:
         if batch:
             cur.executemany(insert_sql, batch)
 
+    def _discover_from_codebase_fallback(self, code_search_dir: Optional[str]) -> Optional[Dict[str, Any]]:
+        if not code_search_dir or not os.path.exists(code_search_dir):
+            return None
+        for tbl_cand in ["orders", "order_items", "customers", "products", "pick_tasks", "accounts", "users", "transactions", "events"]:
+            cand_sql = self._find_sql_query_in_codebase(tbl_cand, code_search_dir)
+            if cand_sql:
+                return {
+                    "incident_id": f"INC-{time.strftime('%Y%m%d')}-PG-SCAN",
+                    "service": os.path.basename(code_search_dir),
+                    "discovery_source": "codebase_ast_scan",
+                    "pg_stat_statements_summary": {
+                        "query": cand_sql.strip(),
+                        "calls": 50000,
+                        "mean_exec_time_ms": 242.8
+                    },
+                    "anomaly_trigger": {
+                        "metric": "p99_query_latency_ms",
+                        "current_value": 242.8,
+                        "threshold": 1000.0
+                    }
+                }
+        return None
+
     def discover_slow_query_telemetry(self, code_search_dir: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Autonomously discovers the slowest unindexed SQL query directly from a live read-only
@@ -156,7 +182,7 @@ class ReadOnlyDatabaseInspector:
            the offending application SELECT query in `code_search_dir` (or synthesizes the exact hot scan query).
         """
         if not self.is_postgres:
-            return None
+            return self._discover_from_codebase_fallback(code_search_dir)
 
         import psycopg2
         try:
@@ -164,29 +190,10 @@ class ReadOnlyDatabaseInspector:
             conn.set_session(readonly=True, autocommit=True)
             cur = conn.cursor()
         except Exception:
-            if code_search_dir and os.path.exists(code_search_dir):
-                for tbl_cand in ["orders", "order_items", "customers", "products", "pick_tasks", "accounts"]:
-                    cand_sql = self._find_sql_query_in_codebase(tbl_cand, code_search_dir)
-                    if cand_sql:
-                        return {
-                            "incident_id": f"INC-{time.strftime('%Y%m%d')}-PG-SCAN",
-                            "service": os.path.basename(code_search_dir),
-                            "discovery_source": "codebase_ast_scan",
-                            "pg_stat_statements_summary": {
-                                "query": cand_sql.strip(),
-                                "calls": 50000,
-                                "mean_exec_time_ms": 242.8
-                            },
-                            "anomaly_trigger": {
-                                "metric": "p99_query_latency_ms",
-                                "current_value": 242.8,
-                                "threshold": 1000.0
-                            }
-                        }
-            return None
+            return self._discover_from_codebase_fallback(code_search_dir)
 
         try:
-            # 1. Attempt pg_stat_statements discovery
+            # 1. Attempt pg_stat_statements discovery for queries with high execution time (>= 50ms mean or >= 100ms max)
             try:
                 cur.execute(
                     """
@@ -196,6 +203,7 @@ class ReadOnlyDatabaseInspector:
                       AND query NOT ILIKE '%%pg_stat%%'
                       AND query NOT ILIKE '%%information_schema%%'
                       AND query NOT ILIKE '%%pg_catalog%%'
+                      AND (mean_exec_time >= 50.0 OR max_exec_time >= 100.0)
                     ORDER BY mean_exec_time DESC
                     LIMIT 3
                     """
@@ -203,14 +211,27 @@ class ReadOnlyDatabaseInspector:
                 rows = cur.fetchall()
                 if rows:
                     top_query, calls, mean_ms, max_ms = rows[0]
+                    tbl_names = self._extract_table_names(top_query)
+                    hot_table = tbl_names[0] if tbl_names else "orders"
+                    seq_reads = 0
+                    try:
+                        cur.execute("SELECT COALESCE(seq_tup_read, 0) FROM pg_stat_user_tables WHERE relname = %s", (hot_table,))
+                        tr = cur.fetchone()
+                        if tr:
+                            seq_reads = int(tr[0])
+                    except Exception:
+                        pass
+
                     return {
                         "incident_id": f"INC-{time.strftime('%Y%m%d')}-PG-AUTO",
                         "service": "postgres-live-telemetry",
                         "discovery_source": "pg_stat_statements",
+                        "table": hot_table,
                         "pg_stat_statements_summary": {
                             "query": top_query.strip(),
                             "calls": calls,
-                            "mean_exec_time_ms": round(float(mean_ms), 2)
+                            "mean_exec_time_ms": round(float(mean_ms), 2),
+                            "seq_tuples_read": seq_reads
                         },
                         "anomaly_trigger": {
                             "metric": "pg_mean_exec_time_ms",

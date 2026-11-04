@@ -25,9 +25,10 @@ if os.path.exists(_cli_env):
 else:
     load_dotenv(override=True)
 
-if sys.stdout.encoding != "utf-8":
+if getattr(sys.stdout, "encoding", "utf-8") != "utf-8":
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 

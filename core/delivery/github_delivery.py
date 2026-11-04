@@ -61,6 +61,66 @@ class GitHubDeliveryEngine:
 
         return "\n".join(diff_outputs)
 
+    def _get_client_ctx(self, timeout: float = 30.0):
+        if self._custom_client is not None:
+            from contextlib import nullcontext
+            return nullcontext(self._custom_client)
+        return httpx.Client(timeout=timeout)
+
+    def find_open_remediation_pr(
+        self,
+        repo: str,
+        incident_id: str,
+        keywords: Optional[List[str]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Pre-flight idempotency gate: checks GitHub for an existing open Pull Request
+        associated with this incident or bottleneck keywords before invoking LLM synthesis.
+        Saves 100% of LLM token costs and cloud container spin-up time if a PR is already active.
+        """
+        if not self.github_token:
+            return None
+
+        headers = {
+            "Authorization": f"Bearer {self.github_token}",
+            "Accept": "application/vnd.github.v3+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+        inc_clean = incident_id.lower().replace("_", "-")
+        search_terms = [inc_clean]
+        if keywords:
+            for kw in keywords:
+                if kw and len(str(kw).strip()) >= 3:
+                    search_terms.append(str(kw).lower().strip())
+
+        try:
+            with self._get_client_ctx(timeout=15.0) as client:
+                prs_resp = client.get(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=30", headers=headers)
+                if prs_resp.status_code == 200:
+                    prs_data = prs_resp.json()
+                    if isinstance(prs_data, list):
+                        for opr in prs_data:
+                            if not isinstance(opr, dict):
+                                continue
+                            head_ref = opr.get("head", {}).get("ref", "").lower()
+                            title = (opr.get("title") or "").lower()
+                            body = (opr.get("body") or "").lower()
+
+                            # Match on head ref (e.g. aegis/remediate-inc-20261104-pg-seqscan-...) or keywords
+                            if any(term in head_ref or term in title or term in body for term in search_terms):
+                                return {
+                                    "status": "LIVE_GITHUB_PR_ALREADY_OPEN",
+                                    "pr_number": opr.get("number"),
+                                    "html_url": opr.get("html_url"),
+                                    "title": opr.get("title"),
+                                    "branch": opr.get("head", {}).get("ref"),
+                                    "target_repo": repo,
+                                    "message": f"Open Pull Request #{opr.get('number')} already exists for {incident_id}."
+                                }
+        except Exception:
+            pass
+        return None
+
     def deliver_remediation_pr(
         self,
         repo: str,
@@ -101,39 +161,19 @@ class GitHubDeliveryEngine:
             "X-GitHub-Api-Version": "2022-11-28"
         }
 
-        client_provider = self._custom_client if self._custom_client is not None else httpx.Client(timeout=30.0)
+        # Check if an existing open Pull Request already exists for this incident
+        existing_pr = self.find_open_remediation_pr(repo, incident_id)
+        if existing_pr:
+            existing_pr["committed_files"] = list(files_to_commit.keys())
+            existing_pr["base_branch"] = base_branch or "main"
+            return existing_pr
+
         try:
-            with client_provider if hasattr(client_provider, "__enter__") else httpx.Client(timeout=30.0) as client:
+            with self._get_client_ctx(timeout=30.0) as client:
                 # 1. Get repository info & resolve default branch
                 repo_resp = client.get(f"https://api.github.com/repos/{repo}", headers=headers)
                 repo_resp.raise_for_status()
                 default_branch = base_branch or repo_resp.json().get("default_branch", "main")
-
-                # Check if an existing open Pull Request already exists for this incident
-                prs_resp = client.get(f"https://api.github.com/repos/{repo}/pulls?state=open&per_page=15", headers=headers)
-                if prs_resp.status_code == 200:
-                    try:
-                        prs_data = prs_resp.json()
-                        if isinstance(prs_data, list):
-                            for opr in prs_data:
-                                if not isinstance(opr, dict):
-                                    continue
-                                head_ref = opr.get("head", {}).get("ref", "").lower()
-                                inc_clean = incident_id.lower().replace("_", "-")
-                                if inc_clean in head_ref:
-                                    return {
-                                        "status": "LIVE_GITHUB_PR_ALREADY_OPEN",
-                                        "pr_number": opr.get("number"),
-                                        "html_url": opr.get("html_url"),
-                                        "title": opr.get("title"),
-                                        "branch": opr.get("head", {}).get("ref"),
-                                        "base_branch": default_branch,
-                                        "target_repo": repo,
-                                        "committed_files": list(files_to_commit.keys()),
-                                        "message": f"Open Pull Request #{opr.get('number')} already exists for {incident_id}."
-                                    }
-                    except Exception:
-                        pass
 
                 # 2. Get latest commit SHA on base branch
                 ref_resp = client.get(

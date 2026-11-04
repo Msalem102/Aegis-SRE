@@ -28,9 +28,10 @@ if os.path.exists(_runner_env):
 else:
     load_dotenv(override=True)
 
-if sys.stdout.encoding != "utf-8":
+if getattr(sys.stdout, "encoding", "utf-8") != "utf-8":
     try:
-        sys.stdout.reconfigure(encoding="utf-8")
+        if hasattr(sys.stdout, "reconfigure"):
+            sys.stdout.reconfigure(encoding="utf-8")
     except Exception:
         pass
 
@@ -195,6 +196,31 @@ def run_vector_b_remediation(
     print(f" -> Mapped {len(target_files)} context files: {list(target_files.keys())}")
 
     # -------------------------------------------------------------
+    # Step 3.5: Pre-Flight Idempotency Gate (Save 100% Token & Modal Compute Costs)
+    # -------------------------------------------------------------
+    target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
+    delivery = GitHubDeliveryEngine()
+    api_name = api_cfg.name if api_cfg else None
+    existing_pr = delivery.find_open_remediation_pr(
+        repo=target_repo,
+        incident_id=incident_error_log["incident_id"],
+        keywords=[api_name] if api_name else None
+    )
+    if existing_pr:
+        print(f"\n💡 [Pre-Flight Gate] Active Pull Request #{existing_pr['pr_number']} already open on GitHub ({existing_pr['html_url']}).", flush=True)
+        print(f" -> Skipping Meta Muse Spark reasoning and Modal sandbox to conserve token costs.", flush=True)
+        return {
+            "status": "PR_ALREADY_OPEN",
+            "incident_id": incident_error_log["incident_id"],
+            "service": manifest.project.service_name,
+            "diagnosis": f"Existing Pull Request #{existing_pr['pr_number']} is already open for this contract drift.",
+            "unified_diff": f"# Active remediation in PR #{existing_pr['pr_number']}\n# {existing_pr['html_url']}",
+            "patch_code": f"# Active remediation in PR #{existing_pr['pr_number']}\n# {existing_pr['html_url']}",
+            "pr": existing_pr,
+            "tokens_saved": True
+        }
+
+    # -------------------------------------------------------------
     # Step 4: Closed-Loop Synthesis & Ephemeral Sandbox Verification (Max 3 Loops)
     # -------------------------------------------------------------
     muse = MuseSparkClient()
@@ -274,13 +300,15 @@ def run_vector_b_remediation(
         f.write(artifacts["post_mortem_markdown"])
     print(f" -> Saved Incident Post-Mortem Report: {post_mortem_file}")
 
-    if is_read_only_src:
-        patches_dir = os.path.join(output_base_dir, "patches", incident_id.replace("-", "_"))
-        apply_verified_patch_to_repo(patches_dir, verified_synthesis["refactored_files"])
-        print(f" -> Saved Verified Refactored Artifacts (read-only target safe): {patches_dir}")
-    else:
-        apply_verified_patch_to_repo(base_dir, verified_synthesis["refactored_files"])
-        print(f" -> Applied Verified Refactoring directly to repository: {base_dir}")
+    patches_dir = os.path.join(
+        os.getcwd(),
+        "artifacts",
+        manifest.project.service_name,
+        "patches",
+        incident_id.replace("-", "_")
+    )
+    apply_verified_patch_to_repo(patches_dir, verified_synthesis["refactored_files"])
+    print(f" -> Saved Verified Refactored Artifacts: {patches_dir}")
 
     # Compute Git repository root-relative POSIX file paths for atomic GitHub PR commit
     files_to_commit: Dict[str, str] = {}

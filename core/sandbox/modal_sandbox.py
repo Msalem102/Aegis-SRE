@@ -31,7 +31,45 @@ except ImportError:
     MODAL_AVAILABLE = False
 
 
+import shutil
+import tempfile
 import zlib
+
+MODAL_PYTEST_RUNNER = r'''
+import base64
+import json
+import os
+import subprocess
+import sys
+import zlib
+
+def main():
+    bundle_path = sys.argv[1] if len(sys.argv) > 1 else "/root/repo_bundle.zlib"
+    test_target = sys.argv[2] if len(sys.argv) > 2 else "tests"
+
+    with open(bundle_path, "rb") as bf:
+        raw_compressed = bf.read()
+    files = json.loads(zlib.decompress(raw_compressed).decode("utf-8"))
+
+    os.makedirs("/tmp/repo", exist_ok=True)
+    for rel_k, b64_v in files.items():
+        dest = os.path.join("/tmp/repo", rel_k)
+        os.makedirs(os.path.dirname(dest) or "/tmp/repo", exist_ok=True)
+        with open(dest, "wb") as out_f:
+            out_f.write(base64.b64decode(b64_v))
+
+    env = os.environ.copy()
+    env["PYTHONPATH"] = "/tmp/repo"
+    res = subprocess.run(
+        [sys.executable, "-m", "pytest", f"/tmp/repo/{test_target}", "-v", "--tb=short"],
+        cwd="/tmp/repo",
+        env=env
+    )
+    sys.exit(res.returncode)
+
+if __name__ == "__main__":
+    main()
+'''
 
 MOUNTABLE_EXTENSIONS = (
     ".py", ".json", ".toml", ".yaml", ".yml", ".txt", ".ini", ".cfg"
@@ -167,25 +205,31 @@ class EphemeralSandbox:
             mount_files[norm_p] = base64.b64encode(content.encode("utf-8")).decode("ascii")
 
         norm_test_path = test_path.replace("\\", "/").replace(os.sep, "/")
-        compressed_payload = base64.b64encode(
-            zlib.compress(json.dumps(mount_files).encode("utf-8"), level=9)
-        ).decode("ascii")
-        bootstrap_code = (
-            "import os, json, base64, zlib, subprocess, sys; "
-            f"files = json.loads(zlib.decompress(base64.b64decode('{compressed_payload}')).decode('utf-8')); "
-            "os.makedirs('/tmp/repo', exist_ok=True); "
-            "[ (os.makedirs(os.path.dirname('/tmp/repo/' + k) or '/tmp/repo', exist_ok=True), open('/tmp/repo/' + k, 'wb').write(base64.b64decode(v))) for k, v in files.items() ]; "
-            "env = os.environ.copy(); env['PYTHONPATH'] = '/tmp/repo'; "
-            f"res = subprocess.run([sys.executable, '-m', 'pytest', '/tmp/repo/{norm_test_path}', '-v', '--tb=short'], cwd='/tmp/repo', env=env); "
-            "sys.exit(res.returncode)"
-        )
+        compressed_bytes = zlib.compress(json.dumps(mount_files).encode("utf-8"), level=9)
 
-        sb = modal.Sandbox.create(
-            "python", "-u", "-c", bootstrap_code,
-            image=image,
-            app=app,
-            timeout=self.timeout_seconds
-        )
+        staging_dir = tempfile.mkdtemp(prefix="aegis_py_sandbox_")
+        try:
+            runner_file = os.path.join(staging_dir, "pytest_runner.py")
+            bundle_file = os.path.join(staging_dir, "repo_bundle.zlib")
+            with open(runner_file, "w", encoding="utf-8") as rf:
+                rf.write(MODAL_PYTEST_RUNNER)
+            with open(bundle_file, "wb") as bf:
+                bf.write(compressed_bytes)
+
+            mounted_image = (
+                image
+                .add_local_file(runner_file, "/root/pytest_runner.py")
+                .add_local_file(bundle_file, "/root/repo_bundle.zlib")
+            )
+
+            sb = modal.Sandbox.create(
+                "python", "-u", "/root/pytest_runner.py", "/root/repo_bundle.zlib", norm_test_path,
+                image=mounted_image,
+                app=app,
+                timeout=self.timeout_seconds
+            )
+        finally:
+            shutil.rmtree(staging_dir, ignore_errors=True)
 
         dash_url = None
         try:
