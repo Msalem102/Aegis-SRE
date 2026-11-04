@@ -4,7 +4,7 @@ project:
   service_name: "cupertino-coffee-store"
   repository: "ahmedharib/mockStore"
   default_branch: "master"
-  code_dir: "C:/Users/ahmed/Desktop/mockStore"
+  code_dir: "mockStore"
   read_only_source: false
 
 observability:

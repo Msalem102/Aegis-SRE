@@ -1,0 +1,54 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RoastPay Coffee Payment Gateway API",
+    "version": "2.0.0"
+  },
+  "paths": {
+    "/v1/coffee/charges": {
+      "post": {
+        "summary": "Authorize coffee order payment (v2 strict cents & nested billing)",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["order_id", "currency", "amount_cents", "billing"],
+                "additionalProperties": false,
+                "properties": {
+                  "order_id": { "type": "string" },
+                  "currency": { "type": "string", "example": "USD" },
+                  "amount_cents": {
+                    "type": "integer",
+                    "description": "Total coffee order amount in integer cents (e.g. 650 for $6.50)"
+                  },
+                  "billing": {
+                    "type": "object",
+                    "required": ["address"],
+                    "properties": {
+                      "address": {
+                        "type": "object",
+                        "required": ["line1"],
+                        "properties": {
+                          "line1": {
+                            "type": "string",
+                            "description": "Primary street billing address"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Payment authorized" },
+          "422": { "description": "Contract validation error" }
+        }
+      }
+    }
+  }
+}
