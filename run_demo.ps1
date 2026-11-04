@@ -8,7 +8,18 @@ Write-Host "====================================================================
 Write-Host ""
 
 $RootDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$MockStoreDir = Join-Path (Split-Path -Parent $RootDir) "mockStore"
+
+# Locate mockStore
+$MockStoreDir = Join-Path $RootDir "mockStore"
+if (-not (Test-Path $MockStoreDir)) {
+    $SiblingDir = Join-Path (Split-Path -Parent $RootDir) "mockStore"
+    if (Test-Path $SiblingDir) {
+        $MockStoreDir = $SiblingDir
+    } else {
+        Write-Host "Downloading demo microservice (mockStore)..." -ForegroundColor Yellow
+        git clone https://github.com/ahmedharib/mockStore.git $MockStoreDir
+    }
+}
 
 # 0. First-Time Setup & Credentials Check
 $EnvFile = Join-Path $RootDir ".env"
@@ -49,7 +60,14 @@ try {
 # 2. Launch MockStore on port 8000
 Write-Host "`n[2/4] Launching Monitored Service (Cupertino Coffee Store) on http://localhost:8000..." -ForegroundColor Yellow
 $MockPy = Join-Path $MockStoreDir ".venv\Scripts\python.exe"
-if (-not (Test-Path $MockPy)) { $MockPy = "python" }
+if (-not (Test-Path $MockPy)) {
+    $RootPy = Join-Path $RootDir ".venv\Scripts\python.exe"
+    if (Test-Path $RootPy) {
+        $MockPy = $RootPy
+    } else {
+        $MockPy = "python"
+    }
+}
 
 Start-Process cmd.exe -ArgumentList "/c cd /d `"$MockStoreDir`" && `"$MockPy`" server.py" -WindowStyle Normal
 

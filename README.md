@@ -5,7 +5,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![Model Core](https://img.shields.io/badge/Reasoning%20Core-Meta%20Muse%20Spark-purple.svg)](https://api.meta.ai/)
 [![Sandbox Runtime](https://img.shields.io/badge/Verification-Modal%20Cloud%20Micro--VMs-brightgreen.svg)](https://modal.com/)
-[![Test Suite](https://img.shields.io/badge/tests-22%2F22%20passing-brightgreen.svg)](tests/)
+[![Test Suite](https://img.shields.io/badge/tests-23%2F23%20passing-brightgreen.svg)](tests/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Aegis SRE is an autonomous, closed-loop Site Reliability Engineering agent designed to detect, diagnose, and remediate production performance bottlenecks and breaking API changes. 
@@ -182,7 +182,7 @@ GRANT EXECUTE ON FUNCTION pg_stat_statements_reset() TO aegis_ro;
 
 ### Option 1: 1-Click Interactive Demo (Recommended)
 
-The repository provides a single-command launcher that initializes the simulation environment (PostgreSQL container, sample store service, and Aegis SRE):
+The monitored microservice (`mockStore`) is bundled directly inside this repository—no secondary cloning is needed. The repository provides a single-command turnkey launcher for Windows, macOS, and Linux:
 
 ```bash
 # On Windows (Command Prompt):
@@ -190,10 +190,14 @@ run_demo.bat
 
 # On Windows (PowerShell):
 .\run_demo.ps1
+
+# On macOS / Linux:
+chmod +x run_demo.sh
+./run_demo.sh
 ```
 
 This script automatically:
-1. Verifies or boots the PostgreSQL container (`pg-sim`) on port `5432`.
+1. Verifies or boots the PostgreSQL container (`pg-sim`) on port `5432` with `pg_stat_statements` enabled.
 2. Starts the monitored service (`Cupertino Coffee Store`) on `http://localhost:8000`.
 3. Launches the Aegis SRE Control Plane on `http://localhost:8080`.
 4. Opens both applications in your default browser.
@@ -204,8 +208,8 @@ This script automatically:
 
 #### Step 1: Clone and Setup Virtual Environment
 ```bash
-git clone https://github.com/ahmedharib/meta-global-hack.git
-cd meta-global-hack
+git clone https://github.com/ahmedharib/Aegis-SRE.git
+cd Aegis-SRE
 
 python -m venv .venv
 # On Windows:
@@ -324,12 +328,12 @@ Aegis includes comprehensive unit and integration test coverage:
 python -m pytest tests/ -v
 ```
 
-**22/22 Tests Passing:**
+**23/23 Tests Passing:**
 * **`tests/test_aegis_config.py`** (5 tests): Manifest schema validation, read-only driver enforcement, and template roundtrips.
 * **`tests/test_external_blind_readiness.py`** (5 tests): External repository isolation, POSIX path sanitization, alert payload normalization, dynamic dependency mapping, and EXPLAIN plan parsing.
 * **`tests/test_generalization.py`** (2 tests): Validation against unseen logistics schemas and arbitrary database tables.
 * **`tests/test_github_delivery.py`** (6 tests): Atomic Git tree blobs, commit deduplication, unified diff creation, and pre-flight PR idempotency verification.
-* **`tests/test_ui_and_api.py`** (4 tests): Control plane endpoints, sandbox payload transfer integrity, anti-truncation AST patching, and live SSE event stream conformance.
+* **`tests/test_ui_and_api.py`** (5 tests): Control plane endpoints, sandbox payload transfer integrity, anti-truncation AST patching, live SSE event stream conformance, and manual control button pre-flight bypass.
 
 ---
 

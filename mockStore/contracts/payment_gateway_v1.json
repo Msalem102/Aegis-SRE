@@ -1,0 +1,41 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RoastPay Coffee Payment Gateway API",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/v1/coffee/charges": {
+      "post": {
+        "summary": "Authorize coffee order payment",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["order_id", "currency", "amount", "customer_address"],
+                "properties": {
+                  "order_id": { "type": "string" },
+                  "currency": { "type": "string", "example": "USD" },
+                  "amount": {
+                    "type": "number",
+                    "format": "float",
+                    "description": "Total coffee order amount in dollars (e.g. 6.50)"
+                  },
+                  "customer_address": {
+                    "type": "string",
+                    "description": "Flat billing street address string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Payment authorized" }
+        }
+      }
+    }
+  }
+}

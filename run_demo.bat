@@ -9,7 +9,17 @@ echo ===========================================================================
 echo.
 
 set "ROOT_DIR=%~dp0"
-set "MOCKSTORE_DIR=%ROOT_DIR%..\mockStore"
+
+:: Locate mockStore
+if exist "%ROOT_DIR%mockStore" (
+    set "MOCKSTORE_DIR=%ROOT_DIR%mockStore"
+) else if exist "%ROOT_DIR%..\mockStore" (
+    set "MOCKSTORE_DIR=%ROOT_DIR%..\mockStore"
+) else (
+    echo Downloading demo microservice (mockStore)...
+    git clone https://github.com/ahmedharib/mockStore.git "%ROOT_DIR%mockStore"
+    set "MOCKSTORE_DIR=%ROOT_DIR%mockStore"
+)
 
 :: 0. First-Time Setup & Credentials Check
 if not exist "%ROOT_DIR%.env" (
@@ -50,6 +60,8 @@ echo.
 echo [2/4] Launching Monitored Service (Cupertino Coffee Store) on http://localhost:8000...
 if exist "%MOCKSTORE_DIR%\.venv\Scripts\python.exe" (
     set "MOCK_PY=%MOCKSTORE_DIR%\.venv\Scripts\python.exe"
+) else if exist "%ROOT_DIR%.venv\Scripts\python.exe" (
+    set "MOCK_PY=%ROOT_DIR%.venv\Scripts\python.exe"
 ) else (
     set "MOCK_PY=python"
 )

@@ -4,7 +4,7 @@
 * **Project Name:** Aegis SRE — Autonomous Closed-Loop Site Reliability Engineering Agent
 * **Tagline:** An enterprise-grade, closed-loop SRE agent that autonomously detects database bottlenecks & API breaking changes, verifies fixes in isolated Modal Cloud micro-VMs, and delivers ready-to-merge GitHub PRs.
 * **Track / Category:** Meta Global AI Developer Hackathon — Developer Tools & Enterprise Infrastructure
-* **Repository:** [https://github.com/ahmedharib/meta-global-hack](https://github.com/ahmedharib/meta-global-hack)
+* **Repository:** [https://github.com/ahmedharib/Aegis-SRE](https://github.com/ahmedharib/Aegis-SRE) *(formerly meta-global-hack; GitHub maintains automatic redirects)*
 * **Demo Video:** *[Insert YouTube / Loom Link Here]*
 
 ---
@@ -67,7 +67,7 @@ A Supabase-styled dark emerald web dashboard (`http://localhost:8080`) built on 
 ---
 
 ## 🏆 Accomplishments That We're Proud Of
-* **22/22 Automated Tests Passing:** 100% green test suite across configuration validation, external blind readiness, domain generalization, atomic GitHub delivery, and SRE Control Plane streaming.
+* **23/23 Automated Tests Passing:** 100% green test suite across configuration validation, external blind readiness, domain generalization, atomic GitHub delivery, and SRE Control Plane streaming.
 * **Empirical -98.2% Latency Reduction:** Measured on live database workloads (reducing join latency from 242.87ms down to 4.37ms in Modal ephemeral sandboxes).
 * **Zero-Write Production Safety:** Aegis can be deployed against any enterprise database with absolute peace of mind: it requires only read-only replica credentials and never modifies production tables directly.
 * **100% Cloud-Native & Zero-Idle Cost:** Completely eliminates the need for expensive 24/7 listener servers.
@@ -88,13 +88,17 @@ A Supabase-styled dark emerald web dashboard (`http://localhost:8080`) built on 
 ---
 
 ## 💻 Try It Out
-Clone the repository and launch the full interactive demo in one click:
+The demo microservice (`mockStore`) is bundled directly in this repository. Clone and launch the full interactive demo in one click:
 ```bash
-git clone https://github.com/ahmedharib/meta-global-hack.git
-cd meta-global-hack
-# 1-Click Demo Launcher
+git clone https://github.com/ahmedharib/Aegis-SRE.git
+cd Aegis-SRE
+
+# 1-Click Turnkey Demo Launcher:
+# On Windows (Command Prompt):
 run_demo.bat
-# or via PowerShell
+# On Windows (PowerShell):
 .\run_demo.ps1
+# On macOS / Linux:
+chmod +x run_demo.sh && ./run_demo.sh
 ```
 *Monitored Service:* `http://localhost:8000` | *Aegis Control Plane:* `http://localhost:8080`

@@ -1,0 +1,11 @@
+name: "mockstore"
+service: "cupertino-coffee-store"
+
+upstream_apis:
+  - name: "coffee_payment_gateway"
+    baseline_spec: "contracts/payment_gateway_v1.json"
+    spec_url: "contracts/payment_gateway_v2.json"
+    client_repo_root: "."
+    code_root: "app"
+    test_target: "tests/test_payment_checkout.py"
+    max_healing_retries: 3

@@ -124,8 +124,24 @@ class AegisConfigLoader:
         if stripped.startswith(("http://", "https://")):
             return stripped
         if os.path.isabs(stripped):
+            if os.path.exists(stripped):
+                return os.path.normpath(stripped)
+            # If absolute path was on another author's machine, check relative to current project
+            base_cand = os.path.normpath(os.path.join(base_dir, os.path.basename(stripped)))
+            if os.path.exists(base_cand):
+                return base_cand
+            parent_cand = os.path.normpath(os.path.join(base_dir, "..", os.path.basename(stripped)))
+            if os.path.exists(parent_cand):
+                return parent_cand
             return os.path.normpath(stripped)
-        return os.path.normpath(os.path.join(base_dir, stripped))
+
+        cand = os.path.normpath(os.path.join(base_dir, stripped))
+        if os.path.exists(cand):
+            return cand
+        parent_cand = os.path.normpath(os.path.join(base_dir, "..", stripped))
+        if os.path.exists(parent_cand):
+            return parent_cand
+        return cand
 
     @classmethod
     def load(cls, config_path: Optional[str] = None) -> AegisContractManifest:
@@ -418,7 +434,7 @@ project:
 # -----------------------------------------------------------------------------
 observability:
   provider: "direct"
-  watchdog_interval_seconds: 40
+  watchdog_interval_seconds: 60
 
 # -----------------------------------------------------------------------------
 # Database Performance & Zero-Downtime Indexing Contract
