@@ -1551,12 +1551,12 @@
       }
 
       tbody.innerHTML = items.map((inc, idx) => {
-        const isVectorA = (inc.vector || 'a').toLowerCase() === 'a';
-        const vectorBadge = isVectorA
+        const isDbContention = (inc.vector || 'a').toLowerCase() === 'a' || (inc.problem_type || '').toLowerCase().includes('db') || (inc.problem_type || '').toLowerCase().includes('database');
+        const problemBadge = isDbContention
           ? `<span class="bg-solar/20 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[10px]">Database Contention</span>`
           : `<span class="bg-signal/15 text-signal font-extrabold px-2 py-0.5 rounded text-[10px]">API Contract Drift</span>`;
 
-        const speedup = inc.speedup_pct || (isVectorA ? '-97.2%' : '100%');
+        const speedup = inc.speedup_pct || (isDbContention ? '-97.2%' : '100%');
         const prNumber = inc.pr_number || '#--';
         const prUrl = inc.pr_url || '#';
         const statusStr = (inc.status || 'REMEDIATED').toUpperCase();
@@ -1567,7 +1567,7 @@
         return `
           <tr class="hover:bg-daylight/50 transition cursor-pointer" onclick="openPostmortemModal(${idx})">
             <td class="py-4 px-4 font-mono font-bold text-graphite">${inc.incident_id || 'INC-20261103-01'}</td>
-            <td class="py-4 px-4">${vectorBadge}</td>
+            <td class="py-4 px-4">${problemBadge}</td>
             <td class="py-4 px-4 font-semibold text-graphite">${inc.service || 'cupertino-coffee-store'}</td>
             <td class="py-4 px-4 text-graphite/70 max-w-xs truncate">${inc.diagnosis || 'Remediated successfully.'}</td>
             <td class="py-4 px-4 font-extrabold text-field">${speedup}</td>
@@ -1583,9 +1583,9 @@
     function populateVisualizerFromIncident(inc) {
       if (!inc) return;
 
-      const isVectorA = (inc.vector || 'a').toLowerCase() === 'a';
+      const isDbContention = (inc.vector || 'a').toLowerCase() === 'a' || (inc.problem_type || '').toLowerCase().includes('db') || (inc.problem_type || '').toLowerCase().includes('database');
       document.getElementById('active-incident-tag').textContent = inc.incident_id || 'REMEDIATED';
-      document.getElementById('active-incident-title').textContent = inc.title || (isVectorA ? 'Database Contention Auto-Remediation' : 'Upstream API Contract Drift Remediation');
+      document.getElementById('active-incident-title').textContent = inc.title || (isDbContention ? 'Database Contention Auto-Remediation' : 'Upstream API Contract Drift Remediation');
       document.getElementById('visualizer-service-name').textContent = inc.service || 'cupertino-coffee-store';
 
       // Latencies & delta
@@ -1637,7 +1637,7 @@
       const codeTitleEl = document.getElementById('synthesized-code-title');
       const codeDescEl = document.getElementById('synthesized-ddl-desc');
 
-      if (isVectorA) {
+      if (isDbContention) {
         if (metricHeaderEl) metricHeaderEl.textContent = 'Query Execution Latency & Concurrency Impact';
         if (beforeLblEl) beforeLblEl.textContent = 'Baseline Production Latency (Sequential Scan Bottleneck)';
         if (afterLblEl) afterLblEl.textContent = 'Modal Cloud Micro-VM Latency (Verified Zero-Downtime Index)';

@@ -21,9 +21,9 @@ We asked: **What if an AI Site Reliability Engineer could not only diagnose outa
 ---
 
 ## ⚡ What It Does
-Aegis SRE is an enterprise-grade, domain-agnostic autonomous SRE agent that runs continuous closed-loop remediation across two critical production vectors:
+Aegis SRE is an enterprise-grade, domain-agnostic autonomous SRE agent that runs continuous closed-loop remediation across two critical production failure modes:
 
-### 1. Vector A: Database Contention & Zero-Downtime Indexing
+### 1. Database Contention & Zero-Downtime Indexing
 * **Telemetry Discovery:** Direct read-only inspection via `pg_stat_statements` and `pg_stat_user_tables` sequential scan analysis + AST codebase scanner.
 * **Proactive Surge Detection:** Detects algorithmic $O(N)$ sequential scan surges (+50,000 tuples read per query) proactively before table volumes breach SLA thresholds.
 * **Zero Production Write Risk:** Enforces strictly read-only connections at the PostgreSQL driver session level (`readonly=True`).
@@ -31,7 +31,7 @@ Aegis SRE is an enterprise-grade, domain-agnostic autonomous SRE agent that runs
 * **Modal Ephemeral Sandbox Gate:** Provisions an isolated PostgreSQL 16 micro-VM in Modal Cloud, replicates multi-table schemas, seeds realistic synthetic data, executes the candidate migration, and evaluates median execution times across 5 runs of `EXPLAIN (ANALYZE, BUFFERS)`.
 * **Empirical Delivery:** Mandates an $\ge 80\%$ latency reduction before opening an atomic GitHub Pull Request with an interactive post-mortem report.
 
-### 2. Vector B: Upstream API Contract Drift Remediation
+### 2. Upstream API Contract Drift Remediation
 * **Alert Ingestion:** Catches runtime HTTP 422 errors and upstream schema breaking changes via `/webhooks/alert`.
 * **Tri-Mode Contract Discovery:** Operates seamlessly via (1) Two-Spec Structural AST Diffing, (2) Single-Spec Live Discovery, or (3) Pure Error-Driven Schema Inference (zero specs required).
 * **AST Surgical Patching:** Traces dependencies across models and client files using Python AST, surgically applying patch blocks without file truncation.

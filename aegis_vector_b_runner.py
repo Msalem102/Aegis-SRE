@@ -1,5 +1,5 @@
 """
-Aegis SRE - Vector B Orchestration Runner (Error-Activated, Self-Healing, 100% Generic).
+Aegis SRE - API Contract Drift Orchestration Runner (Error-Activated, Self-Healing, 100% Generic).
 Workflow:
 1. Outage Activation: Downstream service suffers runtime API failure (inbound alert webhook / HTTP 4xx event
    or failing verification suite), activating the Aegis SRE agent.
@@ -94,7 +94,7 @@ def run_vector_b_remediation(
     if not api_cfg and not client_repo_path and not v2_spec_path:
         raise RuntimeError(
             f"No 'upstream_apis' entries configured in '{config_path}'. "
-            "Add an upstream API contract configuration to run Vector B remediation."
+            "Add an upstream API contract configuration to run API Contract Drift remediation."
         )
 
     raw_v1 = v1_spec_path if v1_spec_path is not None else (api_cfg.baseline_spec if api_cfg else None)

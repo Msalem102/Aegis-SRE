@@ -1,5 +1,5 @@
 """
-Read-Only Database Inspector (Vector A).
+Read-Only Database Inspector (Database Contention).
 Provides the AI agent with least-privilege, strictly read-only database access to:
 1. Inspect live PostgreSQL or SQLite table schemas, column types, and primary keys.
 2. Inspect existing index catalogs (`pg_indexes` / `PRAGMA index_list`).

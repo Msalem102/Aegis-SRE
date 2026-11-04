@@ -1,8 +1,8 @@
 """
 Autonomous Alert Webhook Normalizer.
 Classifies and normalizes inbound JSON alert payloads (from application middleware,
-Alertmanager, Sentry, or direct health/watchdog monitors) into Vector A (Database)
-or Vector B (Upstream API Contract Drift) remediation triggers.
+Alertmanager, Sentry, or direct health/watchdog monitors) into Database Contention
+or Upstream API Contract Drift remediation triggers.
 """
 
 from typing import Dict, Any, Optional
@@ -13,7 +13,7 @@ import hashlib
 
 
 class AlertEventNormalizer:
-    """Classifies generic JSON alert webhooks into Vector A or Vector B incident payloads."""
+    """Classifies generic JSON alert webhooks into Database Contention or API Contract Drift incident payloads."""
 
     DB_EVENT_KEYWORDS = {
         "slow_query", "db_slow_query", "db_timeout", "postgres_slow_query",
@@ -64,7 +64,7 @@ class AlertEventNormalizer:
             or default_service
         )
 
-        # 1. Extract Database Slow Query / Latency Breach signals (Vector A)
+        # 1. Extract Database Slow Query / Latency Breach signals (Database Contention)
         sql_query = (
             raw_payload.get("pg_stat_statements_summary", {}).get("query")
             or raw_payload.get("offending_query")
@@ -143,7 +143,7 @@ class AlertEventNormalizer:
                 }
             }
 
-        # 2. Extract API Contract Drift / HTTP 4xx-5xx / Runtime Exception signals (Vector B)
+        # 2. Extract API Contract Drift / HTTP 4xx-5xx / Runtime Exception signals (API Contract Drift)
         exc_msg = (
             raw_payload.get("error_message")
             or raw_payload.get("error")

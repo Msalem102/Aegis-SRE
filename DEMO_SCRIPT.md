@@ -9,8 +9,8 @@ This script is structured for a high-impact, professional 2.5 to 3-minute video 
 | Timestamp | Segment | Visual on Screen | Key Narration Focus |
 | :--- | :--- | :--- | :--- |
 | **0:00 - 0:35** | **The Hook & Problem** | Slide / Code editor + Terminal | Why AI coding bots fail in production & The Deterministic Sandbox Mandate |
-| **0:35 - 1:25** | **Vector A: DB Contention** | Split Screen: Coffee Store (:8000) & Aegis Control Plane (:8080) | Sequential scan surge, Modal Cloud verification, GitHub PR with -98% latency |
-| **1:25 - 2:05** | **Vector B: API Contract Drift** | Coffee Store (:8000) & Aegis Live Event Stream | Upstream 422 alert, AST diff, Modal Linux micro-VM pytest, GitHub PR |
+| **0:35 - 1:25** | **Database Contention Demo** | Split Screen: Coffee Store (:8000) & Aegis Control Plane (:8080) | Sequential scan surge, Modal Cloud verification, GitHub PR with -98% latency |
+| **1:25 - 2:05** | **API Contract Drift Demo** | Coffee Store (:8000) & Aegis Live Event Stream | Upstream 422 alert, AST diff, Modal Linux micro-VM pytest, GitHub PR |
 | **2:05 - 2:35** | **Architecture & Safety** | SRE UI + Serverless Architecture Diagram | Pre-flight idempotency gate, `readonly=True` safety, scale-to-zero on Modal |
 | **2:35 - 3:00** | **Conclusion & Call to Action** | SRE Control Plane & GitHub PR list | 22/22 tests passing, open source, 1-click launcher |
 
@@ -29,7 +29,7 @@ This script is structured for a high-impact, professional 2.5 to 3-minute video 
 
 ---
 
-### [0:35 - 1:25] Part 2: Vector A Demo (Database Contention)
+### [0:35 - 1:25] Part 2: Database Contention Demo
 * **Visual:** Open browser with two side-by-side tabs: `Cupertino Coffee Store` (`:8000`) on the left, and `Aegis SRE Control Plane` (`:8080`) on the right.
 * **Action:**
   1. On the left tab (`mockStore`), click **"Start Swarm"**.
@@ -47,14 +47,14 @@ This script is structured for a high-impact, professional 2.5 to 3-minute video 
 
 ---
 
-### [1:25 - 2:05] Part 3: Vector B Demo (API Contract Drift)
+### [1:25 - 2:05] Part 3: API Contract Drift Demo
 * **Visual:** Switch focus to Cupertino Coffee Store (`:8000`).
 * **Action:**
   1. Click **"Contract Drift"** (turns amber/active).
   2. Click **"Checkout Bag"** (an HTTP 422 error appears in the cart).
   3. Look at the Aegis Live Event Stream.
 * **Narration:**
-  > *"Now, let's test Vector B: Upstream API Contract Drift. Our payment processor, RoastPay, just upgraded to v2, breaking backward compatibility by requiring `amount_cents` instead of float `amount`.*
+  > *"Now, let's test Upstream API Contract Drift. Our payment processor, RoastPay, just upgraded to v2, breaking backward compatibility by requiring `amount_cents` instead of float `amount`.*
   >
   > *When a customer clicks 'Checkout Bag', the application throws an HTTP 422 error and fires a webhook into Aegis.*
   >

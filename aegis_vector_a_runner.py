@@ -1,5 +1,5 @@
 """
-Aegis SRE - Vector A Orchestration Runner (Error-Activated, Read-Only DB Access, Live Cloud Sandbox).
+Aegis SRE - Database Contention Orchestration Runner (Error-Activated, Read-Only DB Access, Live Cloud Sandbox).
 Workflow:
 1. Outage Activation: Production database outage alert (inbound alert webhook, live pg_stat_statements,
    or JSON telemetry alert) activates the Aegis SRE agent.

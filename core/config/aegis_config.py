@@ -421,7 +421,7 @@ observability:
   watchdog_interval_seconds: 40
 
 # -----------------------------------------------------------------------------
-# Vector A: Database Performance & Zero-Downtime Indexing Contract
+# Database Performance & Zero-Downtime Indexing Contract
 # Requirement: PostgreSQL with strictly Read-Only inspection access
 # -----------------------------------------------------------------------------
 database:
@@ -439,7 +439,7 @@ database:
     min_sandbox_speedup_percent: 80.0
 
 # -----------------------------------------------------------------------------
-# Vector B: Upstream API Contract Drift Auto-Remediation
+# Upstream API Contract Drift Auto-Remediation
 # Requirement: Autonomous AST mapping across code_root (no manual file listing)
 # -----------------------------------------------------------------------------
 upstream_apis:

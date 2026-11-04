@@ -1,8 +1,8 @@
 """
 Meta Muse Spark Client Wrapper (100% Domain-Agnostic).
 Provides structured prompt orchestration for:
-- API Breaking Change Refactoring (Vector B)
-- Incident Post-Mortem & Pull Request Synthesis (Vector A & Vector B)
+- API Breaking Change Refactoring (API Contract Drift)
+- Incident Post-Mortem & Pull Request Synthesis (Database Contention & API Contract Drift)
 """
 
 from typing import Dict, Any, List, Optional, Tuple
@@ -655,7 +655,7 @@ def _aegis_reconcile_contract_payload(raw_payload: dict) -> dict:
         unified_diff_or_ddl: str,
         sandbox_result: Dict[str, Any]
     ) -> Dict[str, Any]:
-        is_db = vector_type.upper() == "VECTOR_A_DB"
+        is_db = vector_type.upper() in ("VECTOR_A_DB", "DATABASE_CONTENTION", "DATABASE")
         prefix = "perf(db)" if is_db else "fix(contract)"
         service = incident_trigger.get("service", "production-service")
         pr_title = f"{prefix}: autonomous remediation for {incident_id} on {service}"
@@ -669,10 +669,11 @@ def _aegis_reconcile_contract_payload(raw_payload: dict) -> dict:
 
         fence_lang = "sql" if is_db else "diff"
         sandbox_summary = json.dumps(sandbox_result, indent=2)
+        problem_label = "Database Contention" if is_db else "API Contract Drift"
 
         md = f"""# Incident Post-Mortem: {incident_id}
 **Service:** `{service}`  
-**Vector:** `{vector_type}`  
+**Problem Type:** `{problem_label}`  
 **Remediation Engine:** Aegis SRE (Meta Muse Spark Core)  
 **Sandbox Gate Status:** `PASSED`  
 

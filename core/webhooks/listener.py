@@ -201,7 +201,7 @@ def execute_classified_remediation(
     classified: Dict[str, Any],
     config_path: str = "aegis.yaml"
 ) -> Dict[str, Any]:
-    """Executes Vector A or Vector B closed-loop remediation for a normalized alert event."""
+    """Executes Database Contention or API Contract Drift closed-loop remediation for a normalized alert event."""
     from dotenv import load_dotenv
     _root_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
     if os.path.exists(_root_env):

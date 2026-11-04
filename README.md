@@ -18,8 +18,8 @@ Unlike traditional generative AI coding tools that output unverified code snippe
 
 - [Overview & Architecture](#overview--architecture)
 - [Core Capabilities](#core-capabilities)
-  - [Vector A: Database Performance & Non-Blocking Indexing](#vector-a-database-performance--non-blocking-indexing)
-  - [Vector B: Upstream API Contract Drift Remediation](#vector-b-upstream-api-contract-drift-remediation)
+  - [Database Performance & Non-Blocking Indexing](#database-performance--non-blocking-indexing)
+  - [Upstream API Contract Drift Remediation](#upstream-api-contract-drift-remediation)
   - [Pre-Flight PR Idempotency Gate](#pre-flight-pr-idempotency-gate)
 - [Prerequisites](#prerequisites)
 - [PostgreSQL Telemetry Setup (`pg_stat_statements`)](#postgresql-telemetry-setup-pg_stat_statements)
@@ -79,7 +79,7 @@ Aegis monitors services continuously, synthesizes minimal corrective changes usi
 
 ## Core Capabilities
 
-### Vector A: Database Performance & Non-Blocking Indexing
+### Database Performance & Non-Blocking Indexing
 * **Telemetry Monitoring:** Continuously tracks read-only metrics using PostgreSQL's `pg_stat_statements` and `pg_stat_user_tables`.
 * **Proactive Sequential Scan Detection:** Rather than waiting for local queries to breach absolute latency thresholds, the watchdog detects sequential scan surges (`seq_tup_read` deltas), catching $O(N)$ table scans before they cause connection pool exhaustion under concurrent load.
 * **Autonomous Query Discovery:** Discovers the offending SQL queries by cross-referencing runtime database statistics with Python codebase AST scans (zero hardcoded queries).
@@ -92,7 +92,7 @@ Aegis monitors services continuously, synthesizes minimal corrective changes usi
   This prevents index builds from blocking concurrent reads and writes or waiting behind long-running transactions.
 * **Empirical Speedup Verification:** Spawns an isolated PostgreSQL 16 micro-VM in Modal Cloud, executes 5 warm runs of `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)`, and verifies an $\ge 80\%$ latency reduction before delivery.
 
-### Vector B: Upstream API Contract Drift Remediation
+### Upstream API Contract Drift Remediation
 * **Alert Ingestion:** Catches runtime HTTP 422 errors and contract validation failures through a standardized webhook (`POST /webhooks/alert`).
 * **Multi-Mode Schema Discovery:** Supports two-spec AST diffing (`baseline_spec` vs `spec_url`), single-spec discovery, or pure runtime error inference (extracting requirements directly from error messages and tracebacks).
 * **Surgical AST Code Patching:** Uses Python AST traversal to isolate models, serializers, and client methods, replacing only the affected AST nodes while preserving surrounding code, comments, and imports.
@@ -266,7 +266,7 @@ The Aegis Web Dashboard (`http://localhost:8080`) provides real-time operational
 |  [Query SLA: < 1000ms]   [Telemetry Watchdog: ACTIVE]   [Sandbox Gate: Modal Ready]   |
 +---------------------------------------------------------------------------------------+
 |  Autonomous Controls:                                                                 |
-|    [ Fix Database Contention (Vector A) ]   [ Fix API Contract Drift (Vector B) ]     |
+|    [ Fix Database Contention ]              [ Fix API Contract Drift ]                 |
 |                                                                                       |
 |  Execution Latency Benchmark:                                                         |
 |    Baseline:   [========================================] 242.87 ms (Seq Scan)        |
