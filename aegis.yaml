@@ -16,7 +16,7 @@ project:
 # -----------------------------------------------------------------------------
 observability:
   provider: "direct"
-  watchdog_interval_seconds: 60
+  watchdog_interval_seconds: 40
 
 # -----------------------------------------------------------------------------
 # Vector A: Database Performance & Zero-Downtime Indexing Contract

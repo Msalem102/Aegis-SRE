@@ -82,7 +82,7 @@ class UpstreamAPIContractConfig(BaseModel):
 
 class ObservabilityConfig(BaseModel):
     provider: str = Field(default="direct", description="Monitoring mode: direct (PostgreSQL catalog & alert webhook) or webhook")
-    watchdog_interval_seconds: int = Field(default=60, ge=5, le=3600)
+    watchdog_interval_seconds: int = Field(default=40, ge=5, le=3600)
 
 
 class SandboxConfig(BaseModel):
@@ -418,7 +418,7 @@ project:
 # -----------------------------------------------------------------------------
 observability:
   provider: "direct"
-  watchdog_interval_seconds: 60
+  watchdog_interval_seconds: 40
 
 # -----------------------------------------------------------------------------
 # Vector A: Database Performance & Zero-Downtime Indexing Contract

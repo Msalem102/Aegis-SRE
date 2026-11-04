@@ -208,8 +208,6 @@ def run_vector_b_remediation(
         vector="b"
     )
     if existing_pr:
-        print(f"\n💡 [Pre-Flight Gate] Active Pull Request #{existing_pr['pr_number']} already open on GitHub ({existing_pr['html_url']}).", flush=True)
-        print(f" -> Skipping Meta Muse Spark reasoning and Modal sandbox to conserve token costs.", flush=True)
         return {
             "status": "PR_ALREADY_OPEN",
             "incident_id": incident_error_log["incident_id"],

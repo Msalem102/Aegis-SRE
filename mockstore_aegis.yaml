@@ -9,7 +9,7 @@ project:
 
 observability:
   provider: "direct"
-  watchdog_interval_seconds: 60
+  watchdog_interval_seconds: 40
 
 database:
   engine: "postgres"

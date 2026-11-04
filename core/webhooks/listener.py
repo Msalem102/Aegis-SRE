@@ -226,19 +226,13 @@ def execute_classified_remediation(
     if existing_pr:
         pr_num = existing_pr.get("pr_number")
         pr_url = existing_pr.get("html_url", "")
-        stream_mgr.log(
-            f"💡 [Idempotency Gate] Pull Request #{pr_num} already active on {target_repo} for '{incident_id}'. Skipping LLM reasoning & cloud micro-VM to conserve token costs.",
-            log_type="info",
-            source=f"vector_{vector}"
-        )
-        print(f"[Idempotency Gate] Open Pull Request #{pr_num} already exists ({pr_url}). Skipping LLM & cloud compute.", flush=True)
         return {
             "event_uid": uid,
             "vector": vector,
             "incident_id": incident_id,
             "service": manifest.project.service_name,
             "title": f"Active Remediation PR #{pr_num} Found",
-            "diagnosis": f"Pre-flight check detected active Pull Request #{pr_num} on GitHub ({pr_url}). Skipping model reasoning to conserve token and cloud compute costs.",
+            "diagnosis": f"Pre-flight check detected active Pull Request #{pr_num} on GitHub ({pr_url}). Remediation skipped.",
             "baseline_ms": "Active",
             "remediated_ms": "PR Open",
             "speedup_pct": "Idempotent",
@@ -248,7 +242,7 @@ def execute_classified_remediation(
             "patch_code": f"-- Active remediation in PR #{pr_num}\n-- {pr_url}",
             "pr_number": f"#{pr_num}" if pr_num else "",
             "pr_url": pr_url,
-            "status": "REMEDIATED",
+            "status": "PR_ALREADY_OPEN",
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "details": existing_pr
         }
@@ -276,13 +270,7 @@ def execute_classified_remediation(
             pr_num = pr_info.get("pr_number")
             pr_url = pr_info.get("html_url") or ""
 
-            if res.get("status") == "PR_ALREADY_OPEN":
-                stream_mgr.log(
-                    f"💡 [Idempotency Gate] Pull Request #{pr_num} is already active on GitHub ({pr_url}). Duplicate remediation skipped to conserve token costs.",
-                    log_type="info",
-                    source="vector_a"
-                )
-            else:
+            if res.get("status") != "PR_ALREADY_OPEN":
                 stream_mgr.log(
                     f"🎉 [Success] Vector A Remediation Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
                     log_type="success",
@@ -316,13 +304,7 @@ def execute_classified_remediation(
             pr_num = pr_info.get("pr_number")
             pr_url = pr_info.get("html_url") or ""
 
-            if res.get("status") == "PR_ALREADY_OPEN":
-                stream_mgr.log(
-                    f"💡 [Idempotency Gate] Pull Request #{pr_num} is already active on GitHub ({pr_url}). Duplicate remediation skipped to conserve token costs.",
-                    log_type="info",
-                    source="vector_b"
-                )
-            else:
+            if res.get("status") != "PR_ALREADY_OPEN":
                 stream_mgr.log(
                     f"🎉 [Success] Vector B Contract Drift Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
                     log_type="success",
@@ -453,7 +435,7 @@ def create_webhook_app(
             from core.db.inspector import ReadOnlyDatabaseInspector
             db_cfg = manifest.database
             raw_conn = db_cfg.connection_url or db_cfg.read_only_connection_env
-            interval = manifest.observability.watchdog_interval_seconds if manifest.observability else 60
+            interval = manifest.observability.watchdog_interval_seconds if manifest.observability else 40
             is_initial_poll = True
             db_offline_logged = False
 
@@ -498,12 +480,25 @@ def create_webhook_app(
                                         and sig_uid not in active_uids
                                         and (now - last_handled_time.get(sig_uid, 0.0)) >= COOLDOWN_SECONDS
                                     ):
+                                        # Check if open PR already exists before printing noisy alarms
+                                        target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
+                                        pre_open_pr = GitHubDeliveryEngine().find_open_remediation_pr(
+                                            repo=target_repo,
+                                            incident_id=sig_uid,
+                                            keywords=[discovered.get("table")] if discovered.get("table") else None,
+                                            vector="a"
+                                        )
+                                        if pre_open_pr:
+                                            # Bottleneck already has an active PR under review; silently skip printing
+                                            last_handled_time[sig_uid] = now
+                                            continue
+
                                         if is_seq_surge:
                                             print(f"[Aegis DB Watchdog] Active unindexed sequential scan surge detected on '{manifest.project.service_name}' (+{current_reads - prev_reads} tuples read)!", flush=True)
                                         else:
                                             print(f"[Aegis DB Watchdog] High database latency spike detected on '{manifest.project.service_name}' ({current_latency:.1f}ms exceeds SLA threshold)!", flush=True)
                                         active_uids.add(sig_uid)
-                                        await asyncio.to_thread(
+                                        res = await asyncio.to_thread(
                                             _dispatch_remediation,
                                             {"vector": "a", "event_uid": sig_uid, "payload": discovered}
                                         )
@@ -513,7 +508,8 @@ def create_webhook_app(
                                                 last_seq_snapshot[hot_table] = int(fresh_status.get("pg_stat_statements_summary", {}).get("seq_tuples_read", current_reads))
                                         except Exception:
                                             pass
-                                        print(f"\n[Aegis DB Watchdog] Remediation cycle finished. Resuming active monitoring (polling every {interval}s)...\n", flush=True)
+                                        if res and res.get("status") not in ("PR_ALREADY_OPEN", "DUPLICATE_IGNORED"):
+                                            print(f"\n[Aegis DB Watchdog] Remediation cycle finished. Resuming active monitoring (polling every {interval}s)...\n", flush=True)
                             else:
                                 is_initial_poll = False
                     except Exception as err:
@@ -611,7 +607,7 @@ def create_webhook_app(
             "repository": manifest.project.repository,
             "branch": manifest.project.default_branch,
             "watchdog_enabled": enable_db_watchdog,
-            "watchdog_interval": manifest.observability.watchdog_interval_seconds if manifest.observability else 60,
+            "watchdog_interval": manifest.observability.watchdog_interval_seconds if manifest.observability else 40,
             "sla_latency": manifest.database.sla_thresholds.p99_latency_ms if (manifest.database and manifest.database.sla_thresholds) else 1000.0,
             "db_engine": manifest.database.engine if manifest.database else "postgres",
             "model_name": os.getenv("META_MODEL_NAME", "muse-spark-1.2"),
@@ -669,7 +665,7 @@ def create_webhook_app(
                 "service": manifest.project.service_name,
                 "repository": manifest.project.repository,
                 "branch": manifest.project.default_branch,
-                "watchdog_interval": manifest.observability.watchdog_interval_seconds if manifest.observability else 60,
+                "watchdog_interval": manifest.observability.watchdog_interval_seconds if manifest.observability else 40,
                 "sla_latency": manifest.database.sla_thresholds.p99_latency_ms if (manifest.database and manifest.database.sla_thresholds) else 1000.0,
                 "db_engine": manifest.database.engine if manifest.database else "postgres"
             }
@@ -714,7 +710,7 @@ def create_webhook_app(
             db_engine = str(payload.get("db_engine") or "postgres").strip()
             db_env = str(payload.get("db_env") or "DATABASE_RO_URL").strip()
             sla_latency = float(payload.get("sla_latency") or 1000.0)
-            watchdog_interval = int(payload.get("watchdog_interval") or 60)
+            watchdog_interval = int(payload.get("watchdog_interval") or 40)
             code_dir = str(payload.get("code_dir") or "").strip()
 
             if custom_filename:

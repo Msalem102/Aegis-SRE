@@ -251,7 +251,7 @@
               <span class="text-2xl font-extrabold text-graphite tabular" id="kpi-tuples-read">0 Surges</span>
             </div>
             <div class="flex items-center justify-between text-xs text-graphite/50 font-medium">
-              <span id="kpi-watchdog-poll-interval">Polling: 15s</span>
+              <span id="kpi-watchdog-poll-interval">Polling: 40s</span>
               <button onclick="triggerManualScan()" class="text-field font-bold hover:underline flex items-center space-x-1">
                 <span>Scan Now</span>
                 <span class="text-[10px]">&rarr;</span>
@@ -1300,7 +1300,7 @@
         ``,
         `observability:`,
         `  provider: "direct"`,
-        `  watchdog_interval_seconds: 60`,
+        `  watchdog_interval_seconds: 40`,
         ``,
         `database:`,
         `  engine: "${engine}"`,
