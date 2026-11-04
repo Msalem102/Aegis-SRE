@@ -15,6 +15,12 @@ class CustomerTraffic(HttpUser):
         payload = {
             "customer_id": random.randint(1, 1000),
             "product_id": random.randint(1, 4),
-            "quantity": 1
+            "quantity": 1,
+            "client_source": "swarm"
         }
-        self.client.post("/api/v1/orders/checkout", json=payload, name="/checkout [Lock+Sleep]")
+        self.client.post(
+            "/api/v1/orders/checkout",
+            json=payload,
+            headers={"X-Simulation-Swarm": "true"},
+            name="/checkout [Lock+Sleep]"
+        )

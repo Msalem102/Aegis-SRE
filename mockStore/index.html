@@ -852,8 +852,16 @@
         const primaryItem = cart[0];
         const res = await fetch(`${API_BASE}/api/v1/orders/checkout`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ customer_id: 42, product_id: primaryItem.id, quantity: primaryItem.quantity })
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Client-Origin": "storefront"
+          },
+          body: JSON.stringify({ 
+            customer_id: 42, 
+            product_id: primaryItem.id, 
+            quantity: primaryItem.quantity,
+            client_source: "storefront"
+          })
         });
 
         const data = await res.json();

@@ -10,10 +10,11 @@ from dotenv import load_dotenv
 # Load local environment variables from .env
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from typing import Optional
 from pydantic import BaseModel
 import psycopg2
 from psycopg2 import pool
@@ -79,6 +80,7 @@ class CheckoutRequest(BaseModel):
     customer_id: int
     product_id: int
     quantity: int
+    client_source: Optional[str] = "storefront"
 
 def get_connection(timeout: float = 3.0):
     global db_pool
@@ -138,7 +140,7 @@ def get_customer_orders(customer_id: int):
 
 # Synchronous endpoint (def) dispatched to FastAPI threadpool to simulate real concurrent DB locks & pool exhaustion
 @app.post("/api/v1/orders/checkout")
-def checkout_order(req: CheckoutRequest):
+def checkout_order(req: CheckoutRequest, request: Request):
     global contract_drift_enabled
     conn = get_connection()
     cur = conn.cursor()
@@ -160,8 +162,17 @@ def checkout_order(req: CheckoutRequest):
         total_dollars = round(price * req.quantity, 2)
         street_address = "1 Infinite Loop, Cupertino, CA 95014"
 
-        if contract_drift_enabled:
-            # Vector B: Test upstream RoastPay v2 contract drift
+        # Differentiate background swarm load (Vector A DB contention / pool exhaustion)
+        # from real customer checkouts (Vector B API contract drift testing).
+        user_agent = request.headers.get("user-agent", "").lower()
+        is_swarm_traffic = (
+            request.headers.get("x-simulation-swarm") == "true"
+            or "locust" in user_agent
+            or req.client_source == "swarm"
+        )
+
+        if contract_drift_enabled and not is_swarm_traffic:
+            # Vector B: Test upstream RoastPay v2 contract drift on real customer checkouts
             try:
                 charge_coffee_order(
                     order_id=order_id,
@@ -189,7 +200,7 @@ def checkout_order(req: CheckoutRequest):
                         print(f"[mockStore] Notice: Alert webhook to {webhook_url} failed ({hook_err})")
                 raise HTTPException(status_code=422, detail=exc.detail)
         else:
-            # Vector A baseline: simulate payment roundtrip sleep inside transaction (3.5s hold)
+            # Vector A baseline / Swarm traffic: simulate payment roundtrip sleep inside transaction (3.5s hold)
             time.sleep(3.5)
 
         # 4. Finalize order
