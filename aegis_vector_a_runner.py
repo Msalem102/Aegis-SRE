@@ -53,7 +53,7 @@ def run_vector_a_remediation(
     alert_payload_override: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     print("=" * 78)
-    print("🚨 AEGIS SRE: Autonomous Database Performance Remediation (Vector A)")
+    print("🚨 AEGIS SRE: Autonomous Database Contention Remediation")
     print("=" * 78)
 
     manifest = AegisConfigLoader.load_or_default(config_path)
@@ -361,7 +361,7 @@ def run_vector_a_remediation(
         print(f"    Target Repository: {pr['target_repo']}", flush=True)
         print(f"    PR URL:            {pr['html_url']}", flush=True)
 
-    print("\n🎉 Vector A Autonomous Remediation Complete!", flush=True)
+    print("\n🎉 Database Contention Autonomous Remediation Complete!", flush=True)
     print("=" * 78, flush=True)
 
     return {
@@ -380,5 +380,5 @@ if __name__ == "__main__":
     try:
         run_vector_a_remediation()
     except Exception as exc:
-        print(f"❌ Vector A Execution Aborted: {exc}")
+        print(f"❌ Database Contention Execution Aborted: {exc}")
         sys.exit(1)

@@ -53,7 +53,7 @@ def run_vector_b_remediation(
     runtime_error_override: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     print("=" * 78)
-    print("🚨 AEGIS SRE: Autonomous API Contract Drift Remediation (Vector B)")
+    print("🚨 AEGIS SRE: Autonomous API Contract Drift Remediation")
     print("=" * 78)
 
     config_dir = (
@@ -348,7 +348,7 @@ def run_vector_b_remediation(
         apply_verified_patch_to_repo(resolved_repo, verified_synthesis["refactored_files"])
         print(" -> Applied verified patch to repository.")
 
-    print("\n🎉 Vector B Autonomous Remediation Complete!")
+    print("\n🎉 API Contract Drift Autonomous Remediation Complete!")
     print("=" * 78)
 
     return {
@@ -368,5 +368,5 @@ if __name__ == "__main__":
     try:
         run_vector_b_remediation()
     except Exception as exc:
-        print(f"❌ Vector B Execution Aborted: {exc}")
+        print(f"❌ API Contract Drift Execution Aborted: {exc}")
         sys.exit(1)

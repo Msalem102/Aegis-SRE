@@ -355,7 +355,7 @@
                 <span class="text-xs font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-solar text-graphite leading-none" id="active-incident-tag">READY</span>
                 <h3 class="text-lg font-bold text-graphite" id="active-incident-title">Autonomous Remediation Visualizer</h3>
               </div>
-              <p class="text-xs text-graphite/60 mt-1.5">Monitored Target: <span class="font-bold text-graphite" id="visualizer-service-name">cupertino-coffee-store</span> | Monitored Query: <code class="bg-daylight px-2 py-0.5 rounded font-mono text-[11px] text-graphite" id="visualizer-monitored-query">SELECT o.order_id, i.product_id FROM orders o JOIN order_items i...</code></p>
+              <p class="text-xs text-graphite/60 mt-1.5" id="visualizer-target-container">Monitored Target: <span class="font-bold text-graphite" id="visualizer-service-name">cupertino-coffee-store</span> | <span id="visualizer-target-label">Monitored Query:</span> <code class="bg-daylight px-2 py-0.5 rounded font-mono text-[11px] text-graphite" id="visualizer-monitored-query">SELECT o.order_id, i.product_id FROM orders o JOIN order_items i...</code></p>
             </div>
 
             <div class="flex items-center space-x-2">
@@ -369,7 +369,7 @@
           <!-- Latency Delta Comparison (Interactive Visual Bars) -->
           <div class="space-y-4">
             <div class="flex items-center justify-between text-xs font-bold text-graphite/70 uppercase tracking-wide">
-              <span>Query Execution Latency (Production Baseline vs. Modal Cloud Micro-VM)</span>
+              <span id="visualizer-metric-header">Query Execution Latency &amp; Concurrency Impact</span>
               <span class="text-field font-extrabold text-sm tabular" id="speedup-label">Standby</span>
             </div>
 
@@ -380,7 +380,7 @@
                 <div class="flex justify-between text-xs mb-2 font-semibold">
                   <span class="text-amber-900 flex items-center">
                     <span class="w-2.5 h-2.5 rounded-full bg-solar mr-2"></span>
-                    Baseline Production Execution Latency
+                    <span id="val-before-label">Baseline Production Latency (Sequential Scan Bottleneck)</span>
                   </span>
                   <span class="font-extrabold text-graphite tabular" id="val-before-latency">-- ms</span>
                 </div>
@@ -394,7 +394,7 @@
                 <div class="flex justify-between text-xs mb-2 font-semibold">
                   <span class="text-field flex items-center">
                     <span class="w-2.5 h-2.5 rounded-full bg-field mr-2"></span>
-                    Modal Cloud Micro-VM Latency (Verified Zero-Downtime Index)
+                    <span id="val-after-label">Modal Cloud Micro-VM Latency (Verified Zero-Downtime Index)</span>
                   </span>
                   <span class="font-extrabold text-field tabular" id="val-after-latency">-- ms</span>
                 </div>
@@ -414,7 +414,7 @@
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center">
                   <svg class="w-4 h-4 mr-1.5 text-solar" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                  Execution Plan (Baseline)
+                  <span id="explain-before-heading">Execution Plan (Baseline: Sequential Scan)</span>
                 </span>
                 <span class="text-[10px] bg-solar/20 text-amber-900 font-bold px-2 py-0.5 rounded leading-none" id="explain-before-badge">Standby</span>
               </div>
@@ -429,7 +429,7 @@
               <div class="flex items-center justify-between">
                 <span class="text-xs font-bold text-field uppercase tracking-wider flex items-center">
                   <svg class="w-4 h-4 mr-1.5 text-field" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
-                  Remediated Plan (After Verification)
+                  <span id="explain-after-heading">Remediated Plan (Verified Index Scan)</span>
                 </span>
                 <span class="text-[10px] bg-field/15 text-field font-bold px-2 py-0.5 rounded leading-none" id="explain-after-badge">Zero Table Lock</span>
               </div>
@@ -445,7 +445,7 @@
           <div class="bg-daylight/70 border border-graphite/10 rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="space-y-1.5 max-w-2xl">
               <div class="flex items-center space-x-2">
-                <span class="text-xs font-bold text-graphite">Synthesized Migration DDL / Patch:</span>
+                <span class="text-xs font-bold text-graphite" id="synthesized-code-title">Synthesized Zero-Downtime Migration (DDL):</span>
                 <code class="bg-white border border-graphite/10 text-field font-bold px-2 py-0.5 rounded text-xs font-mono truncate max-w-md block" id="synthesized-ddl-text">No pending schema migration required.</code>
               </div>
               <p class="text-[11px] text-graphite/60" id="synthesized-ddl-desc">Verified with CONCURRENTLY clause, lock_timeout='5s', zero schema locks.</p>
@@ -519,7 +519,7 @@
               <thead>
                 <tr class="text-left text-graphite/60 font-bold bg-daylight/60">
                   <th class="py-3 px-4 rounded-l-xl">Incident ID</th>
-                  <th class="py-3 px-4">Vector</th>
+                  <th class="py-3 px-4">Problem Type</th>
                   <th class="py-3 px-4">Service</th>
                   <th class="py-3 px-4">Root Cause Diagnosis</th>
                   <th class="py-3 px-4">Sandbox Benchmark</th>
@@ -615,11 +615,11 @@
               </div>
             </div>
 
-            <!-- Section 2: Database Performance Contract (Vector A) -->
+            <!-- Section 2: Database Performance Contract -->
             <div class="border-t border-graphite/10 pt-6">
               <h4 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
                 <span class="w-2 h-2 rounded-full bg-field mr-2"></span>
-                Vector A: Database Inspection &amp; SLA Mandate
+                Database Inspection &amp; SLA Mandate
               </h4>
               <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -642,11 +642,11 @@
               </div>
             </div>
 
-            <!-- Section 3: Upstream Contract Drift (Vector B) -->
+            <!-- Section 3: Upstream Contract Drift -->
             <div class="border-t border-graphite/10 pt-6">
               <h4 class="text-xs font-extrabold uppercase tracking-wider text-graphite/70 mb-3 flex items-center">
                 <span class="w-2 h-2 rounded-full bg-signal mr-2"></span>
-                Vector B: Upstream API Drift Contract
+                Upstream API Drift Contract
               </h4>
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div>
@@ -851,7 +851,7 @@
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold text-graphite/80 mb-2">Database Engine (Vector A)</label>
+            <label class="block text-xs font-bold text-graphite/80 mb-2">Database Engine (PostgreSQL / SQLite)</label>
             <select id="new-app-engine" onchange="syncNewAppYamlPreview()" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-4 py-2 text-xs font-medium text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
               <option value="postgres">PostgreSQL</option>
               <option value="sqlite">SQLite</option>
@@ -864,9 +864,9 @@
           </div>
         </div>
 
-        <!-- Vector B Upstream API Target (Optional) -->
+        <!-- Upstream API Contract Target (Optional) -->
         <div class="border-t border-graphite/10 pt-4">
-          <label class="block text-xs font-bold text-graphite/80 mb-2">Upstream API Contract Target (Vector B)</label>
+          <label class="block text-xs font-bold text-graphite/80 mb-2">Upstream API Contract Target</label>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <input type="text" id="new-app-api-name" placeholder="API Name (e.g. coffee_payment_gateway)" oninput="syncNewAppYamlPreview()" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-4 py-2 text-xs text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
             <input type="text" id="new-app-api-v2" placeholder="Target Spec (contracts/payment_gateway_v2.json)" oninput="syncNewAppYamlPreview()" class="w-full bg-daylight/50 border border-graphite/15 rounded-xl px-4 py-2 text-xs font-mono text-graphite focus:outline-none focus:ring-1 focus:ring-solar">
@@ -1190,7 +1190,7 @@
 
             <div class="border-t border-graphite/10 pt-4 flex items-center justify-between text-xs text-graphite/60">
               <span>Engine: <strong class="text-graphite font-semibold uppercase">${s.db_engine || 'postgres'}</strong></span>
-              <span>Vector B APIs: <strong class="text-graphite font-semibold">${s.upstream_count || 0}</strong></span>
+              <span>Monitored APIs: <strong class="text-graphite font-semibold">${s.upstream_count || 0}</strong></span>
               <span>SLA: <strong class="text-graphite font-semibold">${s.sla_latency || 1000}ms</strong></span>
             </div>
           </div>
@@ -1546,15 +1546,15 @@
       if (!tbody) return;
 
       if (!items || items.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-graphite/50 font-medium">No incidents recorded yet. Trigger Vector A or Vector B above!</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-graphite/50 font-medium">No incidents recorded yet. Trigger Database Contention or API Contract Drift remediation above!</td></tr>`;
         return;
       }
 
       tbody.innerHTML = items.map((inc, idx) => {
         const isVectorA = (inc.vector || 'a').toLowerCase() === 'a';
         const vectorBadge = isVectorA
-          ? `<span class="bg-solar/20 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[10px]">Vector A (DB)</span>`
-          : `<span class="bg-signal/15 text-signal font-extrabold px-2 py-0.5 rounded text-[10px]">Vector B (API)</span>`;
+          ? `<span class="bg-solar/20 text-amber-900 font-extrabold px-2 py-0.5 rounded text-[10px]">Database Contention</span>`
+          : `<span class="bg-signal/15 text-signal font-extrabold px-2 py-0.5 rounded text-[10px]">API Contract Drift</span>`;
 
         const speedup = inc.speedup_pct || (isVectorA ? '-97.2%' : '100%');
         const prNumber = inc.pr_number || '#--';
@@ -1585,7 +1585,7 @@
 
       const isVectorA = (inc.vector || 'a').toLowerCase() === 'a';
       document.getElementById('active-incident-tag').textContent = inc.incident_id || 'REMEDIATED';
-      document.getElementById('active-incident-title').textContent = inc.title || (isVectorA ? 'Database Sequential Scan Auto-Remediation' : 'Upstream API Contract Drift Remediation');
+      document.getElementById('active-incident-title').textContent = inc.title || (isVectorA ? 'Database Contention Auto-Remediation' : 'Upstream API Contract Drift Remediation');
       document.getElementById('visualizer-service-name').textContent = inc.service || 'cupertino-coffee-store';
 
       // Latencies & delta
@@ -1595,7 +1595,6 @@
 
       document.getElementById('val-before-latency').textContent = beforeMs;
       document.getElementById('val-after-latency').textContent = afterMs;
-      document.getElementById('speedup-label').textContent = `${speedupStr} Faster / Verified`;
 
       document.getElementById('kpi-live-latency').textContent = afterMs;
       document.getElementById('kpi-speedup-delta').textContent = speedupStr;
@@ -1623,24 +1622,52 @@
         }
       }
 
-      // Dynamic proportional bar width
-      document.getElementById('bar-before-latency').style.width = '100%';
-      const numBefore = parseFloat(String(beforeMs).replace(/[^0-9.]/g, '')) || 0;
-      const numAfter = parseFloat(String(afterMs).replace(/[^0-9.]/g, '')) || 0;
-      let afterPct = isVectorA ? 4 : 5;
-      if (numBefore > 0 && numAfter > 0) {
-        afterPct = Math.max(2, Math.min(95, Math.round((numAfter / numBefore) * 100)));
-      }
-      document.getElementById('bar-after-latency').style.width = `${afterPct}%`;
-
-      // Explain / Test nodes from incident record when available
       const beforeBox = document.getElementById('explain-before-box');
       const afterBox = document.getElementById('explain-after-box');
       const beforeLines = Array.isArray(inc.before_plan) && inc.before_plan.length > 0 ? inc.before_plan : null;
       const afterLines = Array.isArray(inc.after_plan) && inc.after_plan.length > 0 ? inc.after_plan : null;
 
+      const metricHeaderEl = document.getElementById('visualizer-metric-header');
+      const beforeLblEl = document.getElementById('val-before-label');
+      const afterLblEl = document.getElementById('val-after-label');
+      const targetLabelEl = document.getElementById('visualizer-target-label');
+      const queryEl = document.getElementById('visualizer-monitored-query');
+      const beforeHeadingEl = document.getElementById('explain-before-heading');
+      const afterHeadingEl = document.getElementById('explain-after-heading');
+      const codeTitleEl = document.getElementById('synthesized-code-title');
+      const codeDescEl = document.getElementById('synthesized-ddl-desc');
+
       if (isVectorA) {
+        if (metricHeaderEl) metricHeaderEl.textContent = 'Query Execution Latency & Concurrency Impact';
+        if (beforeLblEl) beforeLblEl.textContent = 'Baseline Production Latency (Sequential Scan Bottleneck)';
+        if (afterLblEl) afterLblEl.textContent = 'Modal Cloud Micro-VM Latency (Verified Zero-Downtime Index)';
+        if (targetLabelEl) targetLabelEl.textContent = 'Monitored Query:';
+        if (queryEl) {
+          queryEl.textContent = (inc.details && inc.details.pg_stat_statements_summary && inc.details.pg_stat_statements_summary.query) 
+            || 'SELECT o.order_id, i.product_id FROM orders o JOIN order_items i...';
+        }
+
+        document.getElementById('speedup-label').textContent = `${speedupStr} Latency Reduction`;
+
+        if (beforeHeadingEl) beforeHeadingEl.textContent = 'Execution Plan (Baseline: Sequential Scan)';
         document.getElementById('explain-before-badge').textContent = 'Sequential Scan';
+
+        if (afterHeadingEl) afterHeadingEl.textContent = 'Remediated Plan (Verified Index Scan)';
+        document.getElementById('explain-after-badge').textContent = 'Zero Table Lock';
+
+        if (codeTitleEl) codeTitleEl.textContent = 'Synthesized Zero-Downtime Migration (DDL):';
+        if (codeDescEl) codeDescEl.textContent = "Verified with CONCURRENTLY clause, lock_timeout='5s', zero schema locks.";
+
+        // Dynamic proportional bar width for latency
+        document.getElementById('bar-before-latency').style.width = '100%';
+        const numBefore = parseFloat(String(beforeMs).replace(/[^0-9.]/g, '')) || 0;
+        const numAfter = parseFloat(String(afterMs).replace(/[^0-9.]/g, '')) || 0;
+        let afterPct = 4;
+        if (numBefore > 0 && numAfter > 0) {
+          afterPct = Math.max(2, Math.min(95, Math.round((numAfter / numBefore) * 100)));
+        }
+        document.getElementById('bar-after-latency').style.width = `${afterPct}%`;
+
         const bItems = beforeLines || [
           'Table forced to scan all tuples sequentially',
           `Latency: ${beforeMs} (Exceeds SLA threshold)`
@@ -1650,7 +1677,6 @@
           ${bItems.map(line => `<div class="pl-3 text-red-600">&bull; ${escapeHtml(line)}</div>`).join('')}
         `;
 
-        document.getElementById('explain-after-badge').textContent = 'Zero Table Lock';
         const aItems = afterLines || [
           'Zero-downtime CONCURRENTLY index engaged',
           `Ephemeral Modal Sandbox Latency: ${afterMs}`
@@ -1660,7 +1686,29 @@
           ${aItems.map(line => `<div class="pl-3 text-field">&bull; ${escapeHtml(line)}</div>`).join('')}
         `;
       } else {
+        if (metricHeaderEl) metricHeaderEl.textContent = 'Upstream API Contract Conformance & Test Suite Gate';
+        if (beforeLblEl) beforeLblEl.textContent = 'Production Endpoint Status (Schema Drift Breach: HTTP 422)';
+        if (afterLblEl) afterLblEl.textContent = 'Modal Cloud Micro-VM Gate (Patched Contract: HTTP 200, 100% Passed)';
+        if (targetLabelEl) targetLabelEl.textContent = 'Breached Endpoint:';
+        if (queryEl) {
+          queryEl.textContent = (inc.details && inc.details.endpoint) || inc.endpoint || '/api/v1/orders/checkout';
+        }
+
+        document.getElementById('speedup-label').textContent = '100% Contract Conformance';
+
+        if (beforeHeadingEl) beforeHeadingEl.textContent = 'Runtime Error Signature (Drift Breakdown)';
         document.getElementById('explain-before-badge').textContent = 'Schema Drift (422)';
+
+        if (afterHeadingEl) afterHeadingEl.textContent = 'Verified Contract Conformance (Pytest Suite)';
+        document.getElementById('explain-after-badge').textContent = '100% Passed';
+
+        if (codeTitleEl) codeTitleEl.textContent = 'Synthesized Unified Git Patch (Diff):';
+        if (codeDescEl) codeDescEl.textContent = 'Validated against v2 upstream OpenAPI schema, zero breaking changes, pytest suite passed.';
+
+        // In API Contract Drift: Before bar represents 100% failure / drift breach, After bar represents 100% conformance
+        document.getElementById('bar-before-latency').style.width = '100%';
+        document.getElementById('bar-after-latency').style.width = '100%';
+
         const bItems = beforeLines || [
           'Required fields missing / invalid structure',
           'Runtime test suite: FAILED [assert "amount" not in payload]'
@@ -1670,7 +1718,6 @@
           ${bItems.map(line => `<div class="pl-3 text-red-600">&bull; ${escapeHtml(line)}</div>`).join('')}
         `;
 
-        document.getElementById('explain-after-badge').textContent = '100% Passed';
         const aItems = afterLines || [
           'Refactored models & client payload',
           'Pytest verification: PASSED in Modal Cloud Micro-VM'
@@ -1740,7 +1787,8 @@
       btn.innerHTML = `<span>Remediating in Cloud...</span>`;
       btn.disabled = true;
 
-      logToConsole(`[Aegis SRE] Dispatching live autonomous remediation for Vector ${vector.toUpperCase()}...`, 'surge');
+      const problemName = vector === 'a' ? 'Database Contention' : 'API Contract Drift';
+      logToConsole(`[Aegis SRE] Dispatching live autonomous remediation for ${problemName}...`, 'surge');
 
       try {
         const res = await fetch('/api/remediate', {
@@ -1753,9 +1801,9 @@
 
         if (data.status === 'FAILED' || rec.status === 'FAILED') {
           const errMsg = data.error || rec.error || rec.diagnosis || 'Remediation check failed';
-          logToConsole(`[Error] Vector ${vector.toUpperCase()} failed: ${errMsg}`, 'error');
+          logToConsole(`[Error] ${problemName} failed: ${errMsg}`, 'error');
         } else if (data.status === 'COMPLETED' || data.status === 'REMEDIATED') {
-          logToConsole(`[Success] Vector ${vector.toUpperCase()} completed and verified in Modal Sandbox! PR: ${rec.pr_url || 'Created'}`, 'success');
+          logToConsole(`[Success] ${problemName} completed and verified in Modal Sandbox! PR: ${rec.pr_url || 'Created'}`, 'success');
           await fetchStatus();
           await loadIncidents();
           populateVisualizerFromIncident(rec);

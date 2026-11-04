@@ -248,8 +248,9 @@ def execute_classified_remediation(
             "details": existing_pr
         }
 
+    problem_name = "Database Contention" if vector == "a" else "API Contract Drift"
     stream_mgr.log(
-        f"🚨 [Aegis SRE] Dispatching Vector {vector.upper()} Closed-Loop Remediation for '{incident_id}'...",
+        f"🚨 [Aegis SRE] Dispatching {problem_name} Closed-Loop Remediation for '{incident_id}'...",
         log_type="surge",
         source=f"vector_{vector}"
     )
@@ -273,7 +274,7 @@ def execute_classified_remediation(
 
             if res.get("status") != "PR_ALREADY_OPEN":
                 stream_mgr.log(
-                    f"🎉 [Success] Vector A Remediation Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
+                    f"🎉 [Success] Database Contention Remediation Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
                     log_type="success",
                     source="vector_a"
                 )
@@ -283,7 +284,7 @@ def execute_classified_remediation(
                 "vector": "a",
                 "incident_id": res.get("incident_id", payload.get("incident_id")),
                 "service": manifest.project.service_name,
-                "title": "Autonomous Database Sequential Scan Remediation (Vector A)",
+                "title": "Autonomous Database Contention Remediation",
                 "diagnosis": res.get("diagnosis", "Sequential scan bottleneck resolved with zero-downtime index."),
                 "baseline_ms": baseline_str,
                 "remediated_ms": remediated_str,
@@ -307,7 +308,7 @@ def execute_classified_remediation(
 
             if res.get("status") != "PR_ALREADY_OPEN":
                 stream_mgr.log(
-                    f"🎉 [Success] Vector B Contract Drift Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
+                    f"🎉 [Success] API Contract Drift Remediation Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
                     log_type="success",
                     source="vector_b"
                 )
@@ -317,7 +318,7 @@ def execute_classified_remediation(
                 "vector": "b",
                 "incident_id": res.get("incident_id", payload.get("incident_id")),
                 "service": manifest.project.service_name,
-                "title": "Autonomous API Contract Drift Remediation (Vector B)",
+                "title": "Autonomous API Contract Drift Remediation",
                 "diagnosis": res.get("diagnosis", "Upstream API contract drift refactored and verified in Modal Sandbox."),
                 "baseline_ms": "HTTP 422 (Contract Drift)",
                 "remediated_ms": "HTTP 200 (100% Passed)",
@@ -341,7 +342,7 @@ def execute_classified_remediation(
             "vector": vector,
             "incident_id": payload.get("incident_id") or "INC-FAILED",
             "service": manifest.project.service_name,
-            "title": f"Remediation Failed (Vector {vector.upper()})",
+            "title": f"Remediation Failed ({problem_name})",
             "status": "FAILED",
             "error": err_msg,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -373,7 +374,7 @@ def create_webhook_app(
             "incident_id": "INC-20261102-PG-SEQSCAN",
             "vector": "a",
             "service": manifest.project.service_name,
-            "title": "Autonomous Database Sequential Scan Remediation (Vector A)",
+            "title": "Autonomous Database Contention Remediation",
             "diagnosis": "Hash Join bottleneck with two unindexed sequential scans on orders and order_items eliminated with zero-downtime index.",
             "baseline_ms": "242.87 ms",
             "remediated_ms": "6.94 ms",
@@ -973,7 +974,7 @@ def create_webhook_app(
             }
             res = await asyncio.to_thread(_dispatch_remediation, sim_alert)
             if res.get("status") == "FAILED":
-                return {"status": "FAILED", "error": res.get("error", "Vector A remediation failed"), "remediation": res}
+                return {"status": "FAILED", "error": res.get("error", "Database Contention remediation failed"), "remediation": res}
             return {"status": "COMPLETED", "remediation": res}
         else:
             sim_alert = {
@@ -990,7 +991,7 @@ def create_webhook_app(
             }
             res = await asyncio.to_thread(_dispatch_remediation, sim_alert)
             if res.get("status") == "FAILED":
-                return {"status": "FAILED", "error": res.get("error", "Vector B remediation failed"), "remediation": res}
+                return {"status": "FAILED", "error": res.get("error", "API Contract Drift remediation failed"), "remediation": res}
             return {"status": "COMPLETED", "remediation": res}
 
     @app.post("/api/watchdog/scan")
