@@ -26,6 +26,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 from core.config.aegis_config import AegisConfigLoader
 from core.webhooks.alert_normalizer import AlertEventNormalizer
+from core.delivery.github_delivery import GitHubDeliveryEngine
 
 
 class LiveEventStreamManager:
@@ -402,12 +403,6 @@ def create_webhook_app(
 
     def _dispatch_remediation(classified: Dict[str, Any]) -> Dict[str, Any]:
         uid = classified["event_uid"]
-        vec_name = str(classified.get("vector", "a")).upper()
-        stream_mgr.log(
-            f"⚡ [Aegis SRE] Dispatching live autonomous remediation for Vector {vec_name} (UID: {uid})...",
-            log_type="surge",
-            source=f"vector_{str(classified.get('vector', 'a')).lower()}"
-        )
         with remediation_lock:
             try:
                 record = execute_classified_remediation(classified, config_path=config_path)
@@ -1066,6 +1061,25 @@ def create_webhook_app(
                 "status": "DUPLICATE_IGNORED",
                 "event_uid": uid,
                 "message": f"Incident signature recently remediated (within {COOLDOWN_SECONDS}s debounce window)."
+            }
+
+        # Check if an open Pull Request already exists on GitHub for this vector & target
+        target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
+        hot_kw = classified["payload"].get("table") or classified["payload"].get("api_name")
+        pre_existing_pr = GitHubDeliveryEngine().find_open_remediation_pr(
+            repo=target_repo,
+            incident_id=classified["payload"].get("incident_id", uid),
+            keywords=[hot_kw] if hot_kw else None,
+            vector=classified["vector"]
+        )
+        if pre_existing_pr:
+            last_handled_time[uid] = now
+            return {
+                "status": "PR_ALREADY_OPEN",
+                "event_uid": uid,
+                "pr_number": pre_existing_pr.get("pr_number"),
+                "html_url": pre_existing_pr.get("html_url"),
+                "message": f"Remediation already open in Pull Request #{pre_existing_pr.get('pr_number')} on GitHub."
             }
 
         # Mark active immediately to prevent race conditions from concurrent duplicate bursts
