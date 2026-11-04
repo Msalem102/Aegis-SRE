@@ -1,9 +1,9 @@
 @echo off
-setlocal enabledelayedexpansion
+setlocal
 title Aegis SRE - 1-Click Interactive Demo
 
 echo ===============================================================================
-echo   🛡️  AEGIS SRE: Autonomous Closed-Loop Site Reliability Engineering Agent
+echo   AEGIS SRE: Autonomous Closed-Loop Site Reliability Engineering Agent
 echo   Meta Global AI Developer Hackathon Submission
 echo ===============================================================================
 echo.
@@ -17,8 +17,8 @@ docker start pg-sim >nul 2>&1
 if %ERRORLEVEL% equ 0 (
     echo       PostgreSQL container 'pg-sim' is active on localhost:5432.
 ) else (
-    echo       Notice: Docker container 'pg-sim' standby or offline.
-    echo       (Watchdog will auto-engage when database connection is online).
+    echo       Notice: Docker container 'pg-sim' is standby or offline.
+    echo       Watchdog will engage automatically when database connection is online.
 )
 
 :: 2. Launch MockStore Backend on port 8000
@@ -30,7 +30,7 @@ if exist "%MOCKSTORE_DIR%\.venv\Scripts\python.exe" (
     set "MOCK_PY=python"
 )
 
-start "Cupertino Coffee Store (:8000)" cmd /k "cd /d "%MOCKSTORE_DIR%" && "%MOCK_PY%" server.py"
+start "Cupertino Coffee Store (:8000)" cmd /c "cd /d %MOCKSTORE_DIR% && %MOCK_PY% server.py"
 
 :: 3. Open Browser Tabs
 echo.
