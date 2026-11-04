@@ -71,12 +71,15 @@ class GitHubDeliveryEngine:
         self,
         repo: str,
         incident_id: str,
-        keywords: Optional[List[str]] = None
+        keywords: Optional[List[str]] = None,
+        vector: Optional[str] = None
     ) -> Optional[Dict[str, Any]]:
         """
         Pre-flight idempotency gate: checks GitHub for an existing open Pull Request
         associated with this incident or bottleneck keywords before invoking LLM synthesis.
         Saves 100% of LLM token costs and cloud container spin-up time if a PR is already active.
+        Pass vector='a' or 'b' to guarantee vector isolation (e.g. an open API contract PR
+        will never be mistakenly matched as an unindexed database sequential scan fix).
         """
         if not self.github_token:
             return None
@@ -87,11 +90,8 @@ class GitHubDeliveryEngine:
             "X-GitHub-Api-Version": "2022-11-28"
         }
         inc_clean = incident_id.lower().replace("_", "-")
-        search_terms = [inc_clean]
-        if keywords:
-            for kw in keywords:
-                if kw and len(str(kw).strip()) >= 3:
-                    search_terms.append(str(kw).lower().strip())
+        clean_kws = [str(kw).lower().strip() for kw in (keywords or []) if kw and len(str(kw).strip()) >= 3]
+        v_norm = (vector or "").lower().strip()
 
         try:
             with self._get_client_ctx(timeout=15.0) as client:
@@ -106,8 +106,48 @@ class GitHubDeliveryEngine:
                             title = (opr.get("title") or "").lower()
                             body = (opr.get("body") or "").lower()
 
-                            # Match on head ref (e.g. aegis/remediate-inc-20261104-pg-seqscan-...) or keywords
-                            if any(term in head_ref or term in title or term in body for term in search_terms):
+                            # Vector classification to prevent cross-contamination
+                            pr_is_vector_a = (
+                                "-pg-" in head_ref
+                                or "-db-" in head_ref
+                                or "vector_a_database" in body
+                                or "(db)" in title
+                                or "perf(db)" in title
+                                or "index" in title
+                                or "seqscan" in head_ref
+                            )
+                            pr_is_vector_b = (
+                                "-api-" in head_ref
+                                or "vector_b_api_contract" in body
+                                or "(contract)" in title
+                                or "schema drift" in body
+                                or "422" in body
+                            )
+
+                            if v_norm in ("a", "db"):
+                                if pr_is_vector_b and not pr_is_vector_a:
+                                    continue
+                            elif v_norm in ("b", "api"):
+                                if pr_is_vector_a and not pr_is_vector_b:
+                                    continue
+
+                            # Match on exact incident ID or targeted keywords in title/branch/tags
+                            incident_match = inc_clean in head_ref or inc_clean in title or inc_clean in body
+                            kw_match = False
+                            if clean_kws:
+                                for kw in clean_kws:
+                                    if (
+                                        kw in head_ref
+                                        or kw in title
+                                        or f"**table:** {kw}" in body
+                                        or f"table: {kw}" in body
+                                        or f"endpoint: {kw}" in body
+                                        or f"`{kw}`" in body
+                                    ):
+                                        kw_match = True
+                                        break
+
+                            if incident_match or kw_match:
                                 return {
                                     "status": "LIVE_GITHUB_PR_ALREADY_OPEN",
                                     "pr_number": opr.get("number"),

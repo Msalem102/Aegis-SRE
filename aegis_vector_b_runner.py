@@ -204,7 +204,8 @@ def run_vector_b_remediation(
     existing_pr = delivery.find_open_remediation_pr(
         repo=target_repo,
         incident_id=incident_error_log["incident_id"],
-        keywords=[api_name] if api_name else None
+        keywords=[api_name] if api_name else None,
+        vector="b"
     )
     if existing_pr:
         print(f"\n💡 [Pre-Flight Gate] Active Pull Request #{existing_pr['pr_number']} already open on GitHub ({existing_pr['html_url']}).", flush=True)

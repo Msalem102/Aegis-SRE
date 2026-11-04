@@ -143,7 +143,9 @@ class TeeOutput:
                     continue
 
                 low = line.lower()
-                if any(ign in line for ign in ("GET /api/status", "GET /api/stream", "GET /api/services", "GET /api/incidents", "GET /static/", "favicon")):
+                if any(ign in line for ign in ("GET /api/status", "GET /api/stream", "GET /api/services", "GET /api/incidents", "GET /static/", "favicon", "POST /webhooks/alert")):
+                    continue
+                if re.search(r'"(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+/[^"]*\s+HTTP/[0-9.]+"\s+\d{3}', line):
                     continue
 
                 log_type = "info"
@@ -218,7 +220,8 @@ def execute_classified_remediation(
     existing_pr = GitHubDeliveryEngine().find_open_remediation_pr(
         repo=target_repo,
         incident_id=incident_id,
-        keywords=[hot_kw] if hot_kw else None
+        keywords=[hot_kw] if hot_kw else None,
+        vector=vector
     )
     if existing_pr:
         pr_num = existing_pr.get("pr_number")
@@ -273,11 +276,18 @@ def execute_classified_remediation(
             pr_num = pr_info.get("pr_number")
             pr_url = pr_info.get("html_url") or ""
 
-            stream_mgr.log(
-                f"🎉 [Success] Vector A Remediation Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
-                log_type="success",
-                source="vector_a"
-            )
+            if res.get("status") == "PR_ALREADY_OPEN":
+                stream_mgr.log(
+                    f"💡 [Idempotency Gate] Pull Request #{pr_num} is already active on GitHub ({pr_url}). Duplicate remediation skipped to conserve token costs.",
+                    log_type="info",
+                    source="vector_a"
+                )
+            else:
+                stream_mgr.log(
+                    f"🎉 [Success] Vector A Remediation Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
+                    log_type="success",
+                    source="vector_a"
+                )
 
             return {
                 "event_uid": uid,
@@ -306,11 +316,18 @@ def execute_classified_remediation(
             pr_num = pr_info.get("pr_number")
             pr_url = pr_info.get("html_url") or ""
 
-            stream_mgr.log(
-                f"🎉 [Success] Vector B Contract Drift Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
-                log_type="success",
-                source="vector_b"
-            )
+            if res.get("status") == "PR_ALREADY_OPEN":
+                stream_mgr.log(
+                    f"💡 [Idempotency Gate] Pull Request #{pr_num} is already active on GitHub ({pr_url}). Duplicate remediation skipped to conserve token costs.",
+                    log_type="info",
+                    source="vector_b"
+                )
+            else:
+                stream_mgr.log(
+                    f"🎉 [Success] Vector B Contract Drift Verified in Modal Sandbox! PR: {pr_url or pr_num or 'Generated'}",
+                    log_type="success",
+                    source="vector_b"
+                )
 
             return {
                 "event_uid": uid,

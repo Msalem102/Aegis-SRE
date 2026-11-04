@@ -194,7 +194,7 @@ def run_vector_a_remediation(
     target_repo = manifest.project.repository or os.getenv("GITHUB_REPOSITORY") or "org/repo"
     delivery = GitHubDeliveryEngine()
     hot_table = (catalog.get("table_name") or "").strip()
-    existing_pr = delivery.find_open_remediation_pr(repo=target_repo, incident_id=incident_id, keywords=[hot_table])
+    existing_pr = delivery.find_open_remediation_pr(repo=target_repo, incident_id=incident_id, keywords=[hot_table], vector="a")
     if existing_pr:
         print(f"\n💡 [Pre-Flight Gate] Active Pull Request #{existing_pr['pr_number']} already open on GitHub ({existing_pr['html_url']}).", flush=True)
         print(f" -> Skipping Meta Muse Spark reasoning and Modal sandbox to conserve token costs.", flush=True)

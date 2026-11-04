@@ -191,7 +191,7 @@ def cmd_listen(config_path: str, host: str = "0.0.0.0", port: int = 8080, watchd
     print("=" * 78)
 
     app = create_webhook_app(config_path=config_path, enable_db_watchdog=watchdog)
-    uvicorn.run(app, host=host, port=actual_port)
+    uvicorn.run(app, host=host, port=actual_port, access_log=False)
     return 0
 
 
