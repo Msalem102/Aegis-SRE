@@ -208,9 +208,9 @@
       </div>
     </header>
 
-    <!-- ================= KPI METRICS ROW (8px Grid: py-6 = 24px, gap-4 sm:gap-6) ================= -->
-    <section class="bg-white border-b border-graphite/10 py-6 px-6 sm:px-8">
-      <div class="max-w-7xl mx-auto">
+    <!-- ================= KPI METRICS ROW (Aligned 1:1 with Main Content: max-w-7xl mx-auto px-6 sm:px-8) ================= -->
+    <section class="bg-white border-b border-graphite/10 py-6">
+      <div class="max-w-7xl mx-auto px-6 sm:px-8">
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6">
           
           <!-- KPI 1: Live Query SLA & Latency Health -->
@@ -280,24 +280,29 @@
             </div>
           </div>
 
-          <!-- KPI 4: Enterprise Safety & Token Economy -->
+          <!-- KPI 4: Active Model & Token / Cost Accounting -->
           <div class="bg-daylight/50 border border-graphite/10 rounded-2xl p-4 sm:p-6 flex flex-col justify-between hover:border-graphite/20 transition space-y-4 shadow-sm">
             <div class="flex items-center justify-between text-xs text-graphite/60 font-semibold uppercase tracking-wider">
               <span class="flex items-center space-x-1.5">
-                <svg class="w-3.5 h-3.5 text-signal" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                <span>Safety &amp; Token Economy</span>
+                <span class="w-2 h-2 rounded-full bg-purple-500 animate-pulse"></span>
+                <span>Active Model</span>
               </span>
               <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-signal/15 text-signal font-mono leading-none" id="kpi-meta-badge">
-                Pre-Flight Gate: ON
+                Meta Muse Core
               </span>
             </div>
             <div class="my-2 flex items-baseline space-x-2">
-              <span class="text-3xl font-extrabold text-signal tabular" id="kpi-meta-latency">100% Guarded</span>
-              <span class="text-xs text-graphite/60" id="kpi-meta-sub">Zero Waste</span>
+              <span class="text-2xl sm:text-3xl font-extrabold text-signal font-mono truncate" id="kpi-active-model-name">muse-spark-1.2</span>
             </div>
-            <div class="text-[11px] text-graphite/60 font-medium flex items-center justify-between">
-              <span>Read-Only Driver</span>
-              <span class="text-signal font-semibold">Scale-to-Zero ($0/mo)</span>
+            <div class="space-y-1 pt-1 border-t border-graphite/10 text-xs">
+              <div class="flex items-center justify-between font-semibold text-graphite/80">
+                <span id="kpi-model-tokens">Tokens: ~1.4k / run</span>
+                <span class="text-field font-bold" id="kpi-model-cost">&lt; $0.005 est.</span>
+              </div>
+              <div class="flex items-center justify-between text-[11px] text-graphite/50 font-medium">
+                <span>$1.25 / 1M prompt</span>
+                <span class="text-signal font-semibold" id="kpi-model-savings">99.9% ROI vs Manual</span>
+              </div>
             </div>
           </div>
 
@@ -1497,6 +1502,11 @@
           const pollEl = document.getElementById('kpi-watchdog-poll-interval');
           if (pollEl && systemStatus.watchdog_interval) pollEl.textContent = `Polling: ${systemStatus.watchdog_interval}s`;
 
+          if (systemStatus.model_name) {
+            const mEl = document.getElementById('kpi-active-model-name');
+            if (mEl) mEl.textContent = systemStatus.model_name;
+          }
+
           const pill = document.getElementById('watchdog-state-pill');
           if (pill) {
             if (systemStatus.watchdog_enabled) {
@@ -1590,13 +1600,26 @@
       document.getElementById('kpi-live-latency').textContent = afterMs;
       document.getElementById('kpi-speedup-delta').textContent = speedupStr;
 
-      const metaEl = document.getElementById('kpi-meta-latency');
-      const metaSub = document.getElementById('kpi-meta-sub');
-      if (metaEl && inc.details) {
-        const synSec = inc.details.synthesis_seconds || inc.details.execution_time_seconds || inc.details.llm_duration_seconds;
-        if (synSec) {
-          metaEl.textContent = `${parseFloat(synSec).toFixed(1)}s`;
-          if (metaSub) metaSub.textContent = 'Synthesis';
+      // Active Model & Token/Cost Subtexts
+      const costMetrics = inc.cost_metrics 
+        || (inc.details && inc.details.cost_metrics) 
+        || (inc.details && inc.details.synthesis && inc.details.synthesis.cost_metrics);
+      if (costMetrics) {
+        if (costMetrics.model) {
+          const mEl = document.getElementById('kpi-active-model-name');
+          if (mEl) mEl.textContent = costMetrics.model;
+        }
+        const tokEl = document.getElementById('kpi-model-tokens');
+        if (tokEl && costMetrics.total_tokens) {
+          tokEl.textContent = `${costMetrics.total_tokens.toLocaleString()} tokens`;
+        }
+        const costEl = document.getElementById('kpi-model-cost');
+        if (costEl && costMetrics.total_cost_formatted) {
+          costEl.textContent = `${costMetrics.total_cost_formatted} USD`;
+        }
+        const savEl = document.getElementById('kpi-model-savings');
+        if (savEl && costMetrics.roi_comparison && costMetrics.roi_comparison.operational_cost_reduction_percent) {
+          savEl.textContent = `-${costMetrics.roi_comparison.operational_cost_reduction_percent}% vs Manual`;
         }
       }
 
@@ -1792,7 +1815,10 @@
         if (data.meta && data.meta.passed) {
           logToConsole(`[Success] Meta Model API (${data.meta.model}) verified in ${data.meta.latency_ms?.toFixed(1)}ms.`, 'meta');
           document.getElementById('diag-meta-latency').textContent = `${data.meta.latency_ms?.toFixed(1)} ms`;
-          document.getElementById('kpi-meta-latency').textContent = `${(data.meta.latency_ms / 1000).toFixed(2)} s`;
+          const mEl = document.getElementById('kpi-active-model-name');
+          if (mEl && data.meta.model) mEl.textContent = data.meta.model;
+          const costEl = document.getElementById('kpi-model-cost');
+          if (costEl) costEl.textContent = `${data.meta.latency_ms?.toFixed(0)}ms ping`;
         }
         if (data.modal && data.modal.passed) {
           logToConsole(`[Success] Modal Cloud Micro-VM active in ${data.modal.spinup_seconds?.toFixed(2)}s.`, 'success');
