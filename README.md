@@ -2,7 +2,7 @@
 
 **Student:** Mohamed Salem — **25058911**
 
-**External contributor (outside the university):** Ahmed Harib — original Aegis SRE backend author
+**External contributor (outside the university):** Ahmed Harib 
 
 ## Mobile project submission
 
