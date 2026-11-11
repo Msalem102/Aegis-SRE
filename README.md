@@ -1,3 +1,24 @@
+# Aegis Mobile — MTM4681 Milestone 1
+
+**Student:** Mohamed Salem — **25058911**  
+**External contributor (outside the university):** Ahmed Harib — original Aegis SRE backend author
+
+## Mobile project submission
+
+- [Design justification (PDF)](milestone/docs/DESIGN_JUSTIFICATION.pdf)
+- [Illustrated user flow (PDF)](milestone/docs/USER_FLOW.pdf)
+- [Architecture and protocols (PDF)](milestone/docs/ARCHITECTURE_AND_PROTOCOLS.pdf)
+- [Editable wireframes](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=4-195)
+- [Approved mockups](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=20-116)
+- [Interactive prototype](https://www.figma.com/proto/3zM5YkkarvApLs90BDiHmi?node-id=20-117&starting-point-node-id=20%3A117)
+- [Milestone overview and approved screen exports](milestone/README.md)
+
+The mobile interface is a design prototype over the imported Aegis SRE backend. Authentication and agent chat are proposed features. A verified candidate or PR does not imply a production deployment. Prototype navigation and instructor viewing access were confirmed by Mohamed Salem.
+
+The original backend documentation and attribution are preserved below.
+
+---
+
 # Aegis SRE
 
 **Autonomous Closed-Loop Site Reliability Engineering Agent**
