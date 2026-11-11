@@ -15,32 +15,6 @@
 
 The mobile interface is a design prototype over the imported Aegis SRE backend. Authentication and agent chat are proposed features. A verified candidate or PR does not imply a production deployment. Prototype navigation and instructor viewing access were confirmed by Mohamed Salem.
 
-## Mobile screens
-
-### Sign in
-
-<img src="milestone/design/approved-screens/screen-1.png" width="260" alt="Sign in">
-
-### My Work
-
-<img src="milestone/design/approved-screens/screen-2.png" width="260" alt="My Work">
-
-### Inbox incident update
-
-<img src="milestone/design/approved-screens/screen-3.png" width="260" alt="Inbox incident update">
-
-### Queue fix review
-
-<img src="milestone/design/approved-screens/screen-4.png" width="260" alt="Queue fix review">
-
-### Agent conversations
-
-<img src="milestone/design/approved-screens/screen-5.png" width="260" alt="Agent conversations">
-
-### Agent chat
-
-<img src="milestone/design/approved-screens/screen-6.png" width="260" alt="Agent chat">
-
 The original backend documentation and attribution are preserved below.
 
 ---
