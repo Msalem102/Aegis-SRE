@@ -1,6 +1,7 @@
 # Aegis Mobile — MTM4681 Milestone 1
 
-**Student:** Mohamed Salem — **25058911**  
+**Student:** Mohamed Salem — **25058911**
+
 **External contributor (outside the university):** Ahmed Harib — original Aegis SRE backend author
 
 ## Mobile project submission
