@@ -15,10 +15,8 @@ A proposed Flutter mobile companion for investigating incidents, inspecting isol
 
 ## Figma
 
-- [Editable low-fidelity wireframes](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=4-195)
-- [Approved mockups](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=20-116)
+- [Current wireframes and mockups](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=20-116)
 - [Interactive prototype](https://www.figma.com/proto/3zM5YkkarvApLs90BDiHmi?node-id=20-117&starting-point-node-id=20%3A117)
-- [Approved screen exports](design/approved-screens/)
 
 ## Approved experience
 

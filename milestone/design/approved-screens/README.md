@@ -12,4 +12,4 @@ Current approved six-screen design, with black mascot.
 Editable designs: https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=20-116
 Prototype: https://www.figma.com/proto/3zM5YkkarvApLs90BDiHmi?node-id=20-117&starting-point-node-id=20%3A117
 
-These PNGs are reference exports, not editable wireframes. Original low-fidelity wireframes remain on Figma page 01; the approved design is page 03. Old local drafts are archived.
+These PNGs are reference exports, not editable wireframes. The current design is on Figma page 03, Reference-matched Aegis.
