@@ -1,42 +1,45 @@
-# Build roadmap
+# Aegis Mobile roadmap
 
-This is the proposed semester plan, not a record of completed features. Course weeks are used because exact deadline dates and current progress need confirmation.
+The previous Personal Insight roadmap is superseded. This is a plan, not a record of implemented features.
 
-## Milestones
+## Milestone 1 — immediate priority
 
-| Course weeks | Deliverable |
-|---|---|
-| 1–3 | Confirm user/problem, collect an interview or sourced statistic, define models and interfaces. |
-| 4–6 | Build forms and navigation; create mockups; test one HTTP/JSON source; choose storage and state management. |
-| 7 | Submit milestone PDF + Figma/mockup: problem evidence, five or six features, architecture, and weekly responsibilities/risks. |
-| 8 | Midterm; keep implementation scope stable. |
-| 9 | Local CRUD, restart persistence, basic analysis, and saved feedback. |
-| 10 | Authentication, bounded cloud sync, ownership rules, offline/reconnect behavior. |
-| 11 | Trends, evidence details, and complete question/correction flow. |
-| 12 | Real-device testing, security review, release build, README/screenshots, demo rehearsal. |
-| 13 | Working-app presentation, repository, APK/build, videos, and contribution form. |
-| 14 | Final exam. |
+1. Finalize the six-screen mobile scope.
+2. Create editable Figma wireframes.
+3. Produce matching high-fidelity mockups.
+4. Link the prototype and verify main, failed-verification and existing-PR paths.
+5. Export the 1–2 page design justification, user-flow PDF, and architecture/protocols PDF.
+6. Add final Figma links and PDFs to the repository.
+7. Check instructor access, update the class sheet, package the repository and upload to the course portal.
 
-## First decisions
+See [submission checklist](SUBMISSION_CHECKLIST.md) for acceptance checks.
 
-- Confirm team, current course week, devices, and actual submission deadlines.
-- Select a narrow demonstration use case and validate the problem with a real user.
-- Choose Provider or Riverpod, and the local database.
-- Select the first context source and the records permitted to sync.
-- Define one evidence-backed observation, question trigger, and correction rule.
-- Evaluate whether live AI fits the semester; preserve a transparent template-based fallback.
+## Subsequent implementation phases
 
-## Definition of a working baseline
+| Phase | Planned result | Acceptance criterion |
+|---|---|---|
+| Flutter foundation | MVVM structure, navigation and fixture data | All six screens reachable with loading/empty/error states |
+| Backend integration | Status, incident results and foreground events | Client handles real JSON, reconnects and labels source/freshness |
+| Local data | Cached summaries; optional saved notes/bookmarks | Bounded offline access and persistence after restart |
+| Remote access | Authentication, authorization and durable incident state | User access is enforced; service credentials stay server-side |
+| Evidence and review | Verified result display and confirmed GitHub links | Simulation, verification and deployment are not conflated |
+| Quality and delivery | Device tests, documentation and demonstration | Core flow works; failures and offline behavior are demonstrated |
 
-- A user can set a goal, record a reflection/check-in, and retrieve it after an offline restart.
-- An observation links to its evidence and handles missing data honestly.
-- A user correction affects the next review rather than prompting the same misunderstanding again.
-- Source failures and denied permissions preserve core app functionality.
-- Sync handles reconnection without duplicate records; accounts cannot access each other's data.
-- Deleting supporting data invalidates dependent insights.
+Exact final-project dates and grading requirements should be checked against current course materials before implementation.
 
-## Final submission
+## Decisions still open
 
-Approximately five-minute working demo with real-phone and offline/online behavior; clean repository with setup/specifications/screenshots; APK/build; two-minute backup video; contribution form.
+- Figma links and assigned individual/team number.
+- State-management library and local persistence library.
+- Authentication provider and backend ownership rules.
+- Durable incident storage and reliable typed progress messages.
+- Scope of optional notes/bookmarks and synchronization.
+- Whether manual remediation belongs in the first mobile implementation or only incident viewing.
 
-Final-project rubric: working app **8/20**, Flutter quality **6/20**, cloud/local data **3/20**, presentation and Q&A **3/20**. The milestone is 10% of the course grade and the final project is 20%.
+## Deferred scope
+
+Background push notifications, in-app PR merging, automatic production deployment, billing, team administration and broad backend configuration.
+
+## Evidence rule
+
+Do not claim an implementation, successful test, live PR or production improvement until it has actually been verified. Upstream example results remain attributed examples.
