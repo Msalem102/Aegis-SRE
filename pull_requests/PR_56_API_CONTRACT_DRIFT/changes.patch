@@ -1,0 +1,45 @@
+diff --git a/app/payment_models.py b/app/payment_models.py
+index 455e2d1..8e31ba8 100644
+--- a/app/payment_models.py
++++ b/app/payment_models.py
+@@ -1,9 +1,17 @@
+ from pydantic import BaseModel
+ 
+ 
++class BillingAddress(BaseModel):
++    line1: str
++
++
++class Billing(BaseModel):
++    address: BillingAddress
++
++
+ class CoffeeChargePayload(BaseModel):
+-    """Legacy v1 checkout payload sent by Cupertino Coffee Shop."""
++    """RoastPay v2 checkout payload."""
+     order_id: str
+     currency: str = "USD"
+-    amount: float
+-    customer_address: str
++    amount_cents: int
++    billing: Billing
+diff --git a/app/payment_client.py b/app/payment_client.py
+index d28b9aa..2ef40c2 100644
+--- a/app/payment_client.py
++++ b/app/payment_client.py
+@@ -39,12 +39,13 @@ def _simulate_roastpay_v2_gateway(payload: Dict[str, Any]) -> Dict[str, Any]:
+ 
+ 
+ def build_charge_payload(order_id: str, total_dollars: float, street_address: str) -> Dict[str, Any]:
+-    """Builds the outbound JSON dictionary for RoastPay."""
++    """Builds the outbound JSON dictionary for RoastPay v2."""
++    amount_cents = int(round(total_dollars * 100))
+     model = CoffeeChargePayload(
+         order_id=order_id,
+         currency="USD",
+-        amount=total_dollars,
+-        customer_address=street_address,
++        amount_cents=amount_cents,
++        billing={"address": {"line1": street_address}},
+     )
+     return model.model_dump()

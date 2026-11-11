@@ -1,40 +1,8 @@
-# Dart / Flutter generated files
-.dart_tool/
-.flutter-plugins
-.flutter-plugins-dependencies
-.packages
-.pub-cache/
-.pub/
-build/
-coverage/
-**/doc/api/
-**/flutter/ephemeral/
-**/Flutter/ephemeral/
-**/Flutter/Generated.xcconfig
-**/Flutter/flutter_export_environment.sh
-android/local.properties
-android/.gradle/
-ios/Pods/
-macos/Pods/
-**/.symlinks/
-
-# Editors / operating system
-.idea/
-*.iml
-.DS_Store
-Thumbs.db
-*.swp
-
-# Secrets / signing material / personal data
+.venv/
+__pycache__/
+*.pyc
 .env
-.env.*
-!.env.example
-*.jks
-*.keystore
-**/key.properties
-**/*service-account*.json
-**/*serviceAccount*.json
-private/
-local-data/
-
-# Keep pubspec.lock tracked for this application.
+.pytest_cache/
+*.db
+artifacts/
+.vscode/

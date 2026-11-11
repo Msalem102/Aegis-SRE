@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Café Cupertino — Specialty Coffee Roasters</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: [
+              '-apple-system',
+              'BlinkMacSystemFont',
+              '"SF Pro Text"',
+              '"SF Pro Display"',
+              '"SF Pro"',
+              'system-ui',
+              'sans-serif'
+            ],
+            mono: [
+              '"SF Mono"',
+              'ui-monospace',
+              'Menlo',
+              'Monaco',
+              'monospace'
+            ]
+          },
+          colors: {
+            coffee: {
+              cream: '#F7F2EB',       /* Warm latte cream canvas */
+              foam: '#F4ECE1',        /* Soft foam for image backgrounds */
+              sand: '#EADBCE',        /* Subtle warm dividers and borders */
+              caramel: '#C48B54',     /* Warm roasted caramel accent */
+              caramelLight: '#F3E5D8',/* Light caramel chip background */
+              espresso: '#543D2B',    /* Primary rich espresso button and icons */
+              espressoDark: '#3D2C1E',/* Button hover and deep contrast */
+              textPrimary: '#2B1D14', /* Deep cocoa primary text */
+              textSecondary: '#7A6A5E',/* Warm mocha secondary text */
+              white: '#FFFFFF',       /* Crisp white surface */
+              danger: '#B91C1C',      /* Warm rust red for error/stop */
+              success: '#2E7D32',     /* Forest sage green */
+              warning: '#D97706'      /* Warm amber */
+            }
+          },
+          borderRadius: {
+            '2xl': '16px',
+            '3xl': '24px'
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Strict 8px Spacing Grid System & Warm Coffee Aesthetic */
+    body {
+      background-color: #F7F2EB;
+      color: #2B1D14;
+      font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Clean Card & Pill Styling based on inspiration */
+    .coffee-card {
+      background-color: #FFFFFF;
+      border: 1px solid #EADBCE;
+      border-radius: 24px;
+      box-shadow: 0 4px 16px -2px rgba(84, 61, 43, 0.05);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .coffee-card:hover {
+      border-color: #D6C2B0;
+      box-shadow: 0 8px 24px -4px rgba(84, 61, 43, 0.08);
+    }
+
+    .pill-btn-primary {
+      background-color: #543D2B;
+      color: #FFFFFF;
+      border-radius: 9999px;
+      font-weight: 600;
+      transition: background-color 0.15s ease, transform 0.1s ease;
+    }
+    .pill-btn-primary:hover {
+      background-color: #3D2C1E;
+    }
+    .pill-btn-primary:active {
+      transform: scale(0.98);
+    }
+
+    .pill-btn-secondary {
+      background-color: #FFFFFF;
+      color: #543D2B;
+      border: 1px solid #EADBCE;
+      border-radius: 9999px;
+      font-weight: 600;
+      transition: background-color 0.15s ease, border-color 0.15s ease;
+    }
+    .pill-btn-secondary:hover {
+      background-color: #F4ECE1;
+      border-color: #D6C2B0;
+    }
+    .pill-btn-secondary:active {
+      transform: scale(0.98);
+    }
+
+    .pill-btn-danger {
+      background-color: #B91C1C;
+      color: #FFFFFF;
+      border-radius: 9999px;
+      font-weight: 600;
+      transition: background-color 0.15s ease;
+    }
+    .pill-btn-danger:hover {
+      background-color: #991B1B;
+    }
+
+    .pill-btn-warning {
+      background-color: #C48B54;
+      color: #FFFFFF;
+      border-radius: 9999px;
+      font-weight: 600;
+      transition: background-color 0.15s ease;
+    }
+    .pill-btn-warning:hover {
+      background-color: #A8713D;
+    }
+
+    /* Clean Drawer Transition */
+    .cart-drawer-backdrop {
+      transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .cart-drawer-panel {
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Clean Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #F7F2EB;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #D6C2B0;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between selection:bg-coffee-caramel selection:text-white">
+
+  <!-- ==================================================================== -->
+  <!-- TOP APP BAR & SYSTEM CONTROLS (8px Grid, No Online Dot)             -->
+  <!-- ==================================================================== -->
+  <header class="sticky top-0 z-40 bg-[#FFFFFF]/95 backdrop-blur-md border-b border-coffee-sand">
+    <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between relative">
+      
+      <!-- Left: Coffee Brand Wordmark & Icon -->
+      <a href="#" onclick="switchView('store'); return false;" class="flex items-center space-x-3 group shrink-0">
+        <div class="w-10 h-10 rounded-2xl bg-coffee-espresso text-white flex items-center justify-center shadow-sm">
+          <!-- Steaming Coffee Cup Icon from Inspiration -->
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+            <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+            <line x1="6" y1="1" x2="6" y2="4"></line>
+            <line x1="10" y1="1" x2="10" y2="4"></line>
+            <line x1="14" y1="1" x2="14" y2="4"></line>
+          </svg>
+        </div>
+        <div class="flex flex-col">
+          <span class="text-sm font-bold tracking-tight text-coffee-textPrimary leading-tight">Café Cupertino</span>
+          <span class="text-[11px] text-coffee-textSecondary leading-tight">Small-Batch Roastery</span>
+        </div>
+      </a>
+
+      <!-- Center: Navigation Pill Switcher (Centered in middle) -->
+      <nav class="hidden sm:flex items-center space-x-2 bg-coffee-foam p-1 rounded-full border border-coffee-sand absolute left-1/2 -translate-x-1/2">
+        <button id="nav-store-link" onclick="switchView('store')" class="px-4 py-1.5 rounded-full text-xs font-semibold bg-coffee-espresso text-white transition">
+          Menu
+        </button>
+        <button id="nav-orders-link" onclick="switchView('orders')" class="px-4 py-1.5 rounded-full text-xs font-medium text-coffee-textSecondary hover:text-coffee-textPrimary transition">
+          Past Orders
+        </button>
+        <button id="nav-briefing-link" onclick="switchView('briefing')" class="px-4 py-1.5 rounded-full text-xs font-medium text-coffee-textSecondary hover:text-coffee-textPrimary transition">
+          Briefing
+        </button>
+      </nav>
+
+      <!-- Right: System 3-Dot Menu & Shopping Bag -->
+      <div class="flex items-center space-x-2.5 shrink-0">
+        
+        <!-- 3-Dot System Menu (Vector A, Vector B & Latency) -->
+        <div class="relative">
+          <button id="btn-system-menu" onclick="toggleSystemMenu()" class="w-10 h-10 rounded-full bg-coffee-foam border border-coffee-sand flex items-center justify-center text-coffee-textPrimary hover:bg-coffee-sand transition" title="Simulation Controls & Diagnostics" aria-label="System Controls">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="12" cy="5" r="1.75"></circle>
+              <circle cx="12" cy="12" r="1.75"></circle>
+              <circle cx="12" cy="19" r="1.75"></circle>
+            </svg>
+          </button>
+
+          <!-- 3-Dot Popover Dropdown -->
+          <div id="system-menu-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white/95 backdrop-blur-xl rounded-2xl border border-coffee-sand shadow-2xl p-4 z-50 space-y-3.5 transition-all">
+            
+            <!-- Popover Header & Live Latency -->
+            <div class="flex items-center justify-between pb-3 border-b border-coffee-sand/60">
+              <div class="flex items-center space-x-2">
+                <span class="w-2 h-2 rounded-full bg-coffee-caramel inline-block animate-pulse"></span>
+                <span class="text-xs font-bold text-coffee-textPrimary uppercase tracking-wider">Testbed Controls</span>
+              </div>
+              <div class="flex items-center space-x-1.5 text-xs text-coffee-textSecondary bg-coffee-foam px-2.5 py-1 rounded-full border border-coffee-sand/70">
+                <span>Latency:</span>
+                <span id="metric-latency" class="font-mono font-semibold text-coffee-textPrimary">-- ms</span>
+              </div>
+            </div>
+
+            <!-- Controls Section -->
+            <div class="space-y-3">
+              <!-- PROBLEM 2: Vector B API Contract Drift Toggle -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] text-coffee-textSecondary">
+                  <span class="font-semibold text-coffee-textPrimary">Vector B</span>
+                  <span>RoastPay v2 (HTTP 422)</span>
+                </div>
+                <button id="btn-toggle-drift" onclick="toggleContractDrift()" class="w-full h-10 px-3.5 rounded-full text-xs font-semibold transition flex items-center justify-center space-x-2 pill-btn-secondary" title="Toggle Upstream RoastPay v2 Contract Drift (Vector B)">
+                  <span id="drift-status-dot" class="w-2 h-2 rounded-full bg-coffee-sand inline-block"></span>
+                  <span id="btn-drift-label">Contract Drift: Off</span>
+                </button>
+              </div>
+
+              <!-- PROBLEM 1: Vector A Swarm Load Test Trigger -->
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-between text-[11px] text-coffee-textSecondary">
+                  <span class="font-semibold text-coffee-textPrimary">Vector A</span>
+                  <span>15-Slot Pool Starvation (HTTP 503)</span>
+                </div>
+                <button id="btn-toggle-swarm" onclick="toggleSwarm()" class="w-full h-10 px-3.5 rounded-full text-xs font-semibold transition flex items-center justify-center space-x-2 pill-btn-primary" title="Toggle PostgreSQL Connection Pool Swarm Load (Vector A)">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                  </svg>
+                  <span id="btn-swarm-label">Start Swarm</span>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Shopping Bag Button -->
+        <button onclick="toggleCartDrawer(true)" class="w-10 h-10 rounded-full bg-coffee-foam border border-coffee-sand flex items-center justify-center text-coffee-textPrimary relative hover:bg-coffee-sand transition" title="View Your Bag">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <path d="M16 10a4 4 0 0 1-8 0"></path>
+          </svg>
+          <span id="cart-badge" class="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-coffee-caramel text-white text-[10px] font-bold flex items-center justify-center">0</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ==================================================================== -->
+  <!-- MAIN STOREFRONT CONTAINER (8px Spacing Rules: 8, 16, 24, 32, 48)     -->
+  <!-- ==================================================================== -->
+  <main class="max-w-5xl mx-auto w-full px-6 py-8 flex-grow">
+
+    <!-- ================================================================== -->
+    <!-- VIEW 1: COFFEE SHOP MENU                                           -->
+    <!-- ================================================================== -->
+    <div id="view-store" class="space-y-8">
+      
+      <!-- Clean Hero Showcase -->
+      <div class="coffee-card overflow-hidden relative">
+        <div class="p-8 sm:p-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 bg-gradient-to-br from-coffee-foam via-coffee-white to-coffee-foam relative min-h-[190px]">
+          <div class="max-w-md lg:max-w-lg space-y-2 relative z-10">
+            <span class="inline-block px-3 py-1 rounded-full text-[11px] font-bold tracking-wider uppercase bg-coffee-caramelLight text-coffee-caramel">
+              Artisan Roast Selection • Roasted Daily
+            </span>
+            <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-coffee-textPrimary leading-snug">
+              Freshly roasted beans & handcrafted brew tools.
+            </h1>
+            <p class="text-sm text-coffee-textSecondary leading-relaxed pt-1">
+              Sourced from sustainable micro-lots and roasted daily in small batches for exceptional balance and clarity. Complimentary shipping on orders over $35.
+            </p>
+          </div>
+
+          <!-- Coffee Beans Hero Banner Image Spanning Right Side -->
+          <div class="w-full md:w-auto md:absolute md:right-0 md:top-0 md:bottom-0 md:h-full flex items-center justify-end pointer-events-none select-none overflow-hidden">
+            <img src="/static/coffee-beans-hero.png" alt="Freshly Roasted Coffee Beans" class="h-44 sm:h-52 md:h-full w-auto max-w-full md:max-w-md lg:max-w-lg object-cover object-right">
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Filter Tabs -->
+      <div class="flex items-center space-x-2 overflow-x-auto pb-1 text-xs">
+        <button onclick="filterCategory('All')" id="cat-all" class="category-pill px-5 py-2.5 rounded-full bg-coffee-espresso text-white font-semibold shadow-sm transition">
+          All Products
+        </button>
+        <button onclick="filterCategory('Whole Bean')" id="cat-bean" class="category-pill px-5 py-2.5 rounded-full bg-white text-coffee-textSecondary hover:text-coffee-textPrimary border border-coffee-sand font-medium transition">
+          Whole Bean
+        </button>
+        <button onclick="filterCategory('Cold Brew')" id="cat-cold" class="category-pill px-5 py-2.5 rounded-full bg-white text-coffee-textSecondary hover:text-coffee-textPrimary border border-coffee-sand font-medium transition">
+          Cold Brew
+        </button>
+        <button onclick="filterCategory('Brew Gear')" id="cat-gear" class="category-pill px-5 py-2.5 rounded-full bg-white text-coffee-textSecondary hover:text-coffee-textPrimary border border-coffee-sand font-medium transition">
+          Brew Gear
+        </button>
+        <button onclick="filterCategory('Drinkware')" id="cat-drink" class="category-pill px-5 py-2.5 rounded-full bg-white text-coffee-textSecondary hover:text-coffee-textPrimary border border-coffee-sand font-medium transition">
+          Drinkware
+        </button>
+      </div>
+
+      <!-- Product Catalog Grid -->
+      <div id="product-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Injected via JavaScript -->
+        <div class="col-span-full py-16 text-center text-coffee-textSecondary text-sm">
+          Loading coffee catalog...
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- VIEW 2: CUSTOMER ORDER HISTORY (Alex Morgan #42)                   -->
+    <!-- ================================================================== -->
+    <div id="view-orders" class="hidden space-y-6">
+      
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-coffee-sand pb-4">
+        <div>
+          <h2 class="text-xl font-bold tracking-tight text-coffee-textPrimary">Past Orders</h2>
+          <p class="text-xs text-coffee-textSecondary mt-1">Review historical order receipts for customer Alex Morgan (#42)</p>
+        </div>
+
+        <button id="btn-refresh-history" onclick="fetchHistory()" class="h-10 px-5 rounded-full text-xs font-semibold pill-btn-secondary flex items-center space-x-2 self-start sm:self-auto">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"></polyline>
+            <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+          </svg>
+          <span>Query Order History</span>
+        </button>
+      </div>
+
+      <!-- Account Summary Card -->
+      <div class="coffee-card p-6 grid grid-cols-1 sm:grid-cols-3 gap-6 text-xs">
+        <div class="space-y-1">
+          <span class="text-coffee-textSecondary block">Customer Profile</span>
+          <span class="font-bold text-coffee-textPrimary text-sm block">Alex Morgan</span>
+          <span class="text-coffee-caramel font-medium">Customer ID: 42 • Gold Member</span>
+        </div>
+        <div class="space-y-1">
+          <span class="text-coffee-textSecondary block">Delivery Address</span>
+          <span class="font-semibold text-coffee-textPrimary block">1 Infinite Loop</span>
+          <span class="text-coffee-textSecondary">Cupertino, CA 95014</span>
+        </div>
+        <div class="space-y-1">
+          <span class="text-coffee-textSecondary block">Historical Orders</span>
+          <span id="order-history-count" class="text-2xl font-extrabold text-coffee-espresso block">--</span>
+          <span class="text-coffee-textSecondary">Verified in PostgreSQL database</span>
+        </div>
+      </div>
+
+      <!-- Order History Status Display -->
+      <div id="history-box" class="coffee-card p-6 text-xs text-coffee-textSecondary flex items-center justify-between">
+        <span>Click "Query Order History" to retrieve your records.</span>
+        <span class="text-[11px] text-coffee-textSecondary font-mono">Backend: GET /api/v1/customers/42/orders</span>
+      </div>
+
+    </div>
+
+    <!-- ================================================================== -->
+    <!-- VIEW 3: SIMULATION & ARCHITECTURE BRIEFING (VECTORS A & B)         -->
+    <!-- ================================================================== -->
+    <div id="view-briefing" class="hidden space-y-6 max-w-4xl mx-auto">
+      
+      <div class="flex items-center justify-between border-b border-coffee-sand pb-4">
+        <div>
+          <h2 class="text-xl font-bold tracking-tight text-coffee-textPrimary">Testing & Simulation Matrix</h2>
+          <p class="text-xs text-coffee-textSecondary mt-1">Independent controls for Vector A (Database Saturation) and Vector B (API Contract Drift)</p>
+        </div>
+        <button onclick="switchView('store')" class="h-9 px-4 rounded-full text-xs font-semibold pill-btn-secondary">
+          Back to Store
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+        
+        <!-- Vector A Card -->
+        <div class="coffee-card p-6 space-y-3 border-2 border-coffee-sand">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-coffee-foam text-coffee-espresso uppercase">
+              Vector A
+            </span>
+            <span class="font-mono text-coffee-textSecondary text-[11px]">HTTP 503 Pool Starvation</span>
+          </div>
+          <h3 class="text-base font-bold text-coffee-textPrimary">PostgreSQL Pool Exhaustion</h3>
+          <p class="text-coffee-textSecondary leading-relaxed">
+            The database connection pool is constrained to <strong>15 slots</strong>. When the Locust swarm is launched, 25 users spawn @ 5/sec. 
+            Each checkout holds an exclusive product row lock and connection hostage for 3.5s, saturating all 15 connections on the 2nd cycle (seconds 8–12).
+          </p>
+          <div class="pt-2 border-t border-coffee-sand/60 flex items-center justify-between">
+            <span class="text-[11px] text-coffee-textSecondary">Trigger: Top Bar "Start Swarm"</span>
+            <span class="font-mono text-coffee-warning font-semibold">5 users/s × 3.5s = 17.5 slots</span>
+          </div>
+        </div>
+
+        <!-- Vector B Card -->
+        <div class="coffee-card p-6 space-y-3 border-2 border-coffee-sand">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-coffee-caramelLight text-coffee-caramel uppercase">
+              Vector B
+            </span>
+            <span class="font-mono text-coffee-danger text-[11px]">HTTP 422 Schema Drift</span>
+          </div>
+          <h3 class="text-base font-bold text-coffee-textPrimary">RoastPay v2 Contract Drift</h3>
+          <p class="text-coffee-textSecondary leading-relaxed">
+            Upstream payment gateway <strong>RoastPay</strong> upgraded to v2, breaking backward compatibility:
+          </p>
+          <ul class="space-y-1 text-coffee-textSecondary pl-2">
+            <li>• <code class="text-coffee-espresso">amount</code> (float dollars) was removed; requires <code class="text-coffee-espresso">amount_cents</code> (integer).</li>
+            <li>• <code class="text-coffee-espresso">customer_address</code> was removed; requires nested <code class="text-coffee-espresso">billing.address.line1</code>.</li>
+          </ul>
+          <div class="pt-2 border-t border-coffee-sand/60 flex items-center justify-between">
+            <span class="text-[11px] text-coffee-textSecondary">Trigger: Top Bar "Contract Drift"</span>
+            <span class="font-mono text-coffee-danger font-semibold">HTTP 422 Schema Incompatible</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="coffee-card p-6 text-xs space-y-3">
+        <h4 class="font-bold text-coffee-textPrimary">Automated Healing with Aegis SRE</h4>
+        <p class="text-coffee-textSecondary leading-relaxed">
+          When Vector B is toggled ON, failed checkouts emit an error containing full OpenAPI mismatch details. 
+          Aegis SRE diffs <code class="text-coffee-espresso font-mono">contracts/payment_gateway_v1.json</code> against <code class="text-coffee-espresso font-mono">v2.json</code>, 
+          AST-patches <code class="text-coffee-espresso font-mono">app/payment_models.py</code> and <code class="text-coffee-espresso font-mono">app/payment_client.py</code>, 
+          and validates the fix using <code class="text-coffee-espresso font-mono">pytest tests/test_payment_checkout.py</code> inside a Modal Cloud micro-VM before opening a GitHub PR.
+        </p>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- ==================================================================== -->
+  <!-- DEDICATED SHOPPING BAG (CART) SLIDE-OVER DRAWER                      -->
+  <!-- ==================================================================== -->
+  <div id="cart-drawer-container" class="fixed inset-0 z-50 pointer-events-none">
+    
+    <!-- Backdrop Overlay -->
+    <div id="cart-backdrop" onclick="toggleCartDrawer(false)" class="cart-drawer-backdrop fixed inset-0 bg-black/40 opacity-0 pointer-events-none transition-opacity duration-300"></div>
+
+    <!-- Drawer Panel (Slides from Right) -->
+    <div id="cart-panel" class="cart-drawer-panel fixed top-0 right-0 bottom-0 w-full max-w-md bg-white border-l border-coffee-sand shadow-2xl flex flex-col justify-between translate-x-full pointer-events-none transition-transform duration-300">
+      
+      <!-- Cart Drawer Header -->
+      <div class="p-6 border-b border-coffee-sand flex items-center justify-between">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-coffee-foam flex items-center justify-center text-coffee-espresso">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-coffee-textPrimary leading-none">Your Shopping Bag</h3>
+            <span id="cart-items-count-text" class="text-xs text-coffee-textSecondary mt-0.5 block">0 items selected</span>
+          </div>
+        </div>
+
+        <button onclick="toggleCartDrawer(false)" class="w-8 h-8 rounded-full bg-coffee-foam hover:bg-coffee-sand flex items-center justify-center text-coffee-textSecondary hover:text-coffee-textPrimary transition">
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Cart Items List -->
+      <div id="cart-items-list" class="p-6 flex-grow overflow-y-auto space-y-4">
+        <!-- Rendered via JavaScript -->
+        <div class="py-16 text-center text-coffee-textSecondary space-y-3">
+          <div class="w-16 h-16 rounded-full bg-coffee-foam mx-auto flex items-center justify-center text-coffee-textSecondary">
+            <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <path d="M16 10a4 4 0 0 1-8 0"></path>
+            </svg>
+          </div>
+          <p class="text-sm font-semibold text-coffee-textPrimary">Your bag is empty</p>
+          <p class="text-xs text-coffee-textSecondary max-w-xs mx-auto">Select items from our menu to begin checkout.</p>
+        </div>
+      </div>
+
+      <!-- Cart Drawer Footer: Summary & Checkout Button -->
+      <div id="cart-footer" class="p-6 border-t border-coffee-sand bg-coffee-foam space-y-4">
+        <div class="space-y-1.5 text-xs">
+          <div class="flex justify-between text-coffee-textSecondary">
+            <span>Subtotal</span>
+            <span id="cart-subtotal" class="font-mono text-coffee-textPrimary font-semibold">$0.00</span>
+          </div>
+          <div class="flex justify-between text-coffee-textSecondary">
+            <span>Standard Shipping</span>
+            <span class="text-coffee-success font-semibold">Free</span>
+          </div>
+          <div class="flex justify-between text-sm font-bold text-coffee-textPrimary pt-2 border-t border-coffee-sand/70">
+            <span>Estimated Total</span>
+            <span id="cart-total" class="font-mono font-extrabold text-base text-coffee-espresso">$0.00</span>
+          </div>
+        </div>
+
+        <button id="btn-checkout-cart" onclick="checkoutCart()" class="w-full h-12 pill-btn-primary text-xs font-semibold flex items-center justify-center space-x-2 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed">
+          <span>Checkout Bag</span>
+        </button>
+
+        <!-- Checkout Error Banner (Distinguishes Pool Starvation 503 vs Contract Drift 422) -->
+        <div id="checkout-error-banner" class="hidden p-4 rounded-2xl bg-[#FDF2F2] border border-red-200 text-xs text-coffee-danger space-y-1.5">
+          <div class="flex items-center space-x-2">
+            <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+            <span id="checkout-error-title" class="font-bold text-coffee-danger block">Checkout Failed</span>
+          </div>
+          <div id="checkout-error-text" class="text-[11px] leading-relaxed text-coffee-danger/90 whitespace-pre-line pl-6">
+            Error details will appear here.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- ORDER SUCCESS CONFIRMATION MODAL                                     -->
+  <!-- ==================================================================== -->
+  <div id="order-success-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+    <div class="coffee-card max-w-md w-full p-8 text-center space-y-4 bg-white shadow-2xl">
+      <!-- Thumbs Up Icon -->
+      <div class="w-16 h-16 rounded-full bg-coffee-foam border-2 border-coffee-sand flex items-center justify-center text-coffee-espresso mx-auto">
+        <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+        </svg>
+      </div>
+      <div>
+        <h3 class="text-xl font-extrabold text-coffee-textPrimary">Order Placed Successfully!</h3>
+        <p class="text-xs text-coffee-textSecondary mt-1">Payment authorized via RoastPay. Your fresh roast is being prepared.</p>
+      </div>
+      <div class="p-4 rounded-2xl bg-coffee-foam text-xs space-y-1 text-left">
+        <div class="flex justify-between">
+          <span class="text-coffee-textSecondary">Account</span>
+          <span class="font-bold text-coffee-textPrimary">Alex Morgan (#42)</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-coffee-textSecondary">Status</span>
+          <span class="font-bold text-coffee-success">PAID / CONFIRMED</span>
+        </div>
+      </div>
+      <button onclick="dismissSuccessModal()" class="w-full h-11 pill-btn-primary text-xs font-semibold">
+        Continue Shopping
+      </button>
+    </div>
+  </div>
+
+  <!-- ==================================================================== -->
+  <!-- FOOTER                                                               -->
+  <!-- ==================================================================== -->
+  <footer class="border-t border-coffee-sand py-8 px-6 bg-coffee-foam text-xs text-coffee-textSecondary mt-16">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+      <div class="space-y-0.5">
+        <span class="font-bold text-coffee-textPrimary">Café Cupertino Roasters</span>
+        <p class="text-[11px] text-coffee-textSecondary">Vector A (Pool Starvation) & Vector B (API Drift) Testbed</p>
+      </div>
+      <div class="flex items-center space-x-3 text-[11px]">
+        <span>FastAPI</span>
+        <span>•</span>
+        <span>PostgreSQL 16 (Pool=15)</span>
+        <span>•</span>
+        <span>RoastPay v2</span>
+        <span>•</span>
+        <span>Locust Swarm</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- CLEAN WARM TOAST CONTAINER (Bottom Left) -->
+  <div id="toast-container" class="fixed bottom-6 left-6 z-50 flex flex-col space-y-2 pointer-events-none"></div>
+
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
+  <script>
+    const API_BASE = window.location.origin.includes(":8000") 
+      ? window.location.origin 
+      : "http://localhost:8000";
+
+    let pingTimer = null;
+    let isSwarmRunning = false;
+    let isDriftActive = false;
+    let currentCategory = 'All';
+    let allProducts = [];
+    let cart = [];
+
+    // Product metadata details, studio photography on white background, and icons
+    const productMeta = {
+      1: {
+        category: "Whole Bean",
+        desc: "Artisan craft-roasted whole beans with notes of dark cocoa, toasted hazelnut, and sweet almond.",
+        image: "/static/product-1-espresso.jpg",
+        svg: `<svg class="w-12 h-12 text-coffee-espresso" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+          <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+          <line x1="6" y1="1" x2="6" y2="4"></line>
+          <line x1="10" y1="1" x2="10" y2="4"></line>
+          <line x1="14" y1="1" x2="14" y2="4"></line>
+        </svg>`
+      },
+      2: {
+        category: "Cold Brew",
+        desc: "18-hour slow-steeped micro-lot coffee in a sleek glass bottle. Naturally sweet, crisp, and smooth.",
+        image: "/static/product-2-coldbrew.jpg",
+        svg: `<svg class="w-12 h-12 text-coffee-espresso" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6 2L18 2"></path>
+          <path d="M6 6L18 6"></path>
+          <path d="M7 6v14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V6"></path>
+          <line x1="10" y1="11" x2="14" y2="11"></line>
+          <line x1="10" y1="15" x2="14" y2="15"></line>
+        </svg>`
+      },
+      3: {
+        category: "Brew Gear",
+        desc: "Precision ceramic filter cone & glass carafe server for bright, clean pour-over extractions.",
+        image: "/static/product-3-pourover.jpg",
+        svg: `<svg class="w-12 h-12 text-coffee-espresso" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="2 4 22 4 15 14 15 20 9 20 9 14 2 4"></polygon>
+          <line x1="2" y1="4" x2="22" y2="4"></line>
+        </svg>`
+      },
+      4: {
+        category: "Drinkware",
+        desc: "Artisanal 12oz ceramic mug in matte cream with an ergonomic handle and smooth satin finish.",
+        image: "/static/product-4-mug.jpg",
+        svg: `<svg class="w-12 h-12 text-coffee-espresso" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="4" width="15" height="16" rx="3"></rect>
+          <path d="M18 8h2a3 3 0 0 1 0 6h-2"></path>
+        </svg>`
+      }
+    };
+
+    // Navigation Switcher
+    function switchView(viewName) {
+      document.getElementById("view-store").classList.add("hidden");
+      document.getElementById("view-orders").classList.add("hidden");
+      document.getElementById("view-briefing").classList.add("hidden");
+
+      const storeLink = document.getElementById("nav-store-link");
+      const ordersLink = document.getElementById("nav-orders-link");
+      const briefingLink = document.getElementById("nav-briefing-link");
+
+      [storeLink, ordersLink, briefingLink].forEach(el => {
+        if (el) el.className = "px-4 py-1.5 rounded-full text-xs font-medium text-coffee-textSecondary hover:text-coffee-textPrimary transition";
+      });
+
+      if (viewName === 'store') {
+        document.getElementById("view-store").classList.remove("hidden");
+        storeLink.className = "px-4 py-1.5 rounded-full text-xs font-semibold bg-coffee-espresso text-white transition";
+      } else if (viewName === 'orders') {
+        document.getElementById("view-orders").classList.remove("hidden");
+        ordersLink.className = "px-4 py-1.5 rounded-full text-xs font-semibold bg-coffee-espresso text-white transition";
+        fetchHistory();
+      } else if (viewName === 'briefing') {
+        document.getElementById("view-briefing").classList.remove("hidden");
+        briefingLink.className = "px-4 py-1.5 rounded-full text-xs font-semibold bg-coffee-espresso text-white transition";
+      }
+    }
+
+    // Toggle 3-Dot Diagnostics & System Menu Dropdown
+    function toggleSystemMenu() {
+      const menu = document.getElementById("system-menu-dropdown");
+      if (!menu) return;
+      menu.classList.toggle("hidden");
+    }
+
+    document.addEventListener("click", function(e) {
+      const menu = document.getElementById("system-menu-dropdown");
+      const btn = document.getElementById("btn-system-menu");
+      if (!menu || !btn) return;
+      if (!menu.contains(e.target) && !btn.contains(e.target)) {
+        menu.classList.add("hidden");
+      }
+    });
+
+    // Toggle Cart Drawer
+    function toggleCartDrawer(open) {
+      const container = document.getElementById("cart-drawer-container");
+      const backdrop = document.getElementById("cart-backdrop");
+      const panel = document.getElementById("cart-panel");
+
+      if (open) {
+        container.classList.remove("pointer-events-none");
+        backdrop.classList.remove("opacity-0", "pointer-events-none");
+        backdrop.classList.add("opacity-100", "pointer-events-auto");
+        panel.classList.remove("translate-x-full", "pointer-events-none");
+        panel.classList.add("translate-x-0", "pointer-events-auto");
+        renderCart();
+      } else {
+        backdrop.classList.remove("opacity-100", "pointer-events-auto");
+        backdrop.classList.add("opacity-0", "pointer-events-none");
+        panel.classList.remove("translate-x-0", "pointer-events-auto");
+        panel.classList.add("translate-x-full", "pointer-events-none");
+        setTimeout(() => {
+          container.classList.add("pointer-events-none");
+        }, 300);
+      }
+    }
+
+    // Add Item to Shopping Bag
+    function addToCart(productId) {
+      const product = allProducts.find(p => p.id === productId);
+      if (!product) return;
+
+      const existing = cart.find(item => item.id === productId);
+      if (existing) {
+        existing.quantity += 1;
+      } else {
+        const meta = productMeta[productId] || productMeta[1];
+        cart.push({
+          id: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: 1,
+          category: meta.category,
+          svg: meta.svg,
+          image: meta.image
+        });
+      }
+
+      updateCartBadge();
+      showToast(`Added ${product.name} to your bag`, "success");
+    }
+
+    // Update Quantity in Cart
+    function updateCartQuantity(productId, delta) {
+      const item = cart.find(i => i.id === productId);
+      if (!item) return;
+
+      item.quantity += delta;
+      if (item.quantity <= 0) {
+        cart = cart.filter(i => i.id !== productId);
+      }
+
+      updateCartBadge();
+      renderCart();
+    }
+
+    function removeCartItem(productId) {
+      cart = cart.filter(i => i.id !== productId);
+      updateCartBadge();
+      renderCart();
+    }
+
+    function updateCartBadge() {
+      const totalCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+      document.getElementById("cart-badge").innerText = totalCount;
+    }
+
+    // Render Cart Items inside Drawer
+    function renderCart() {
+      const listEl = document.getElementById("cart-items-list");
+      const countText = document.getElementById("cart-items-count-text");
+      const subtotalEl = document.getElementById("cart-subtotal");
+      const totalEl = document.getElementById("cart-total");
+      const checkoutBtn = document.getElementById("btn-checkout-cart");
+      const errorBanner = document.getElementById("checkout-error-banner");
+
+      errorBanner.classList.add("hidden");
+
+      const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
+      const subtotal = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+
+      countText.innerText = `${totalItems} item${totalItems === 1 ? '' : 's'} in your bag`;
+      subtotalEl.innerText = `$${subtotal.toFixed(2)}`;
+      totalEl.innerText = `$${subtotal.toFixed(2)}`;
+
+      if (cart.length === 0) {
+        checkoutBtn.disabled = true;
+        listEl.innerHTML = `
+          <div class="py-16 text-center text-coffee-textSecondary space-y-3">
+            <div class="w-16 h-16 rounded-full bg-coffee-foam mx-auto flex items-center justify-center text-coffee-textSecondary">
+              <svg class="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                <line x1="3" y1="6" x2="21" y2="6"></line>
+                <path d="M16 10a4 4 0 0 1-8 0"></path>
+              </svg>
+            </div>
+            <p class="text-sm font-semibold text-coffee-textPrimary">Your bag is empty</p>
+            <p class="text-xs text-coffee-textSecondary max-w-xs mx-auto">Select items from our menu to begin checkout.</p>
+          </div>
+        `;
+        return;
+      }
+
+      checkoutBtn.disabled = false;
+      listEl.innerHTML = cart.map(item => `
+        <div class="flex items-center justify-between p-3 rounded-2xl bg-coffee-foam/60 border border-coffee-sand/50">
+          <div class="flex items-center space-x-3">
+            <div class="w-14 h-14 rounded-xl bg-white border border-coffee-sand/70 overflow-hidden flex items-center justify-center shrink-0">
+              <img src="${item.image || '/static/product-1-espresso.jpg'}" alt="${item.name}" class="w-full h-full object-cover" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+              <div class="hidden p-2">${item.svg}</div>
+            </div>
+            <div>
+              <h4 class="text-xs font-bold text-coffee-textPrimary leading-tight">${item.name}</h4>
+              <span class="text-[11px] text-coffee-caramel font-semibold block mt-0.5">$${item.price.toFixed(2)}</span>
+            </div>
+          </div>
+
+          <!-- Quantity Stepper & Remove -->
+          <div class="flex items-center space-x-2">
+            <div class="flex items-center space-x-1.5 bg-white px-2 py-1 rounded-full border border-coffee-sand">
+              <button onclick="updateCartQuantity(${item.id}, -1)" class="w-5 h-5 rounded-full hover:bg-coffee-foam flex items-center justify-center text-xs font-bold text-coffee-espresso">-</button>
+              <span class="text-xs font-bold text-coffee-textPrimary w-4 text-center">${item.quantity}</span>
+              <button onclick="updateCartQuantity(${item.id}, 1)" class="w-5 h-5 rounded-full hover:bg-coffee-foam flex items-center justify-center text-xs font-bold text-coffee-espresso">+</button>
+            </div>
+            <button onclick="removeCartItem(${item.id})" class="text-coffee-textSecondary hover:text-coffee-danger p-1" title="Remove Item">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Checkout Bag
+    async function checkoutCart() {
+      if (cart.length === 0) return;
+
+      const btn = document.getElementById("btn-checkout-cart");
+      const errorBanner = document.getElementById("checkout-error-banner");
+      const errorTitle = document.getElementById("checkout-error-title");
+      const errorText = document.getElementById("checkout-error-text");
+
+      errorBanner.classList.add("hidden");
+      btn.innerHTML = `<span class="inline-block animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent mr-1.5"></span> Authorizing Payment...`;
+      btn.disabled = true;
+
+      try {
+        const primaryItem = cart[0];
+        const res = await fetch(`${API_BASE}/api/v1/orders/checkout`, {
+          method: "POST",
+          headers: { 
+            "Content-Type": "application/json",
+            "X-Client-Origin": "storefront"
+          },
+          body: JSON.stringify({ 
+            customer_id: 42, 
+            product_id: primaryItem.id, 
+            quantity: primaryItem.quantity,
+            client_source: "storefront"
+          })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          // Parse structured error detail
+          let title = "Checkout Failed";
+          let message = "An error occurred during checkout.";
+
+          if (res.status === 422) {
+            title = "Upstream Contract Drift Detected (HTTP 422)";
+            if (data.detail && data.detail.messages) {
+              message = `RoastPay v2 rejected legacy payload format:\n• ` + data.detail.messages.join("\n• ");
+            } else if (data.detail) {
+              message = typeof data.detail === 'object' ? JSON.stringify(data.detail) : data.detail;
+            }
+          } else if (res.status === 503) {
+            title = "Database Connection Pool Exhausted (HTTP 503)";
+            message = data.detail || "All 15 connection slots are saturated by background traffic.";
+          } else {
+            message = data.detail || `Server returned HTTP ${res.status}`;
+          }
+
+          const err = new Error(message);
+          err.title = title;
+          throw err;
+        }
+
+        // Successfully placed
+        cart = [];
+        updateCartBadge();
+        toggleCartDrawer(false);
+        loadProducts();
+
+        // Open Success Confirmation
+        document.getElementById("order-success-modal").classList.remove("hidden");
+      } catch (err) {
+        errorBanner.classList.remove("hidden");
+        errorTitle.innerText = err.title || "Checkout Error";
+        errorText.innerText = err.message;
+        showToast(err.title || "Checkout Error", "error");
+      } finally {
+        btn.innerHTML = `<span>Checkout Bag</span>`;
+        btn.disabled = false;
+      }
+    }
+
+    function dismissSuccessModal() {
+      document.getElementById("order-success-modal").classList.add("hidden");
+    }
+
+    // Category Filtering
+    function filterCategory(cat) {
+      currentCategory = cat;
+      const buttons = document.querySelectorAll(".category-pill");
+      buttons.forEach(b => {
+        b.className = "category-pill px-5 py-2.5 rounded-full bg-white text-coffee-textSecondary hover:text-coffee-textPrimary border border-coffee-sand font-medium transition";
+      });
+
+      const catMap = {
+        'All': 'cat-all',
+        'Whole Bean': 'cat-bean',
+        'Cold Brew': 'cat-cold',
+        'Brew Gear': 'cat-gear',
+        'Drinkware': 'cat-drink'
+      };
+
+      const activeBtn = document.getElementById(catMap[cat]);
+      if (activeBtn) {
+        activeBtn.className = "category-pill px-5 py-2.5 rounded-full bg-coffee-espresso text-white font-semibold shadow-sm transition";
+      }
+
+      renderProductsGrid();
+    }
+
+    // Render Product Cards Grid
+    function renderProductsGrid() {
+      const grid = document.getElementById("product-grid");
+      const filtered = currentCategory === 'All' 
+        ? allProducts 
+        : allProducts.filter(p => {
+            const meta = productMeta[p.id];
+            return meta && meta.category === currentCategory;
+          });
+
+      if (filtered.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-12 text-center text-xs text-coffee-textSecondary">No items found in this category.</div>`;
+        return;
+      }
+
+      grid.innerHTML = filtered.map(p => {
+        const item = productMeta[p.id] || {
+          category: "Specialty",
+          desc: "Fresh handcrafted artisan selection.",
+          svg: productMeta[1].svg
+        };
+
+        return `
+          <div class="coffee-card p-4 flex flex-col justify-between">
+            <div>
+              <div class="aspect-square w-full rounded-2xl bg-coffee-foam border border-coffee-sand/60 overflow-hidden mb-4 relative group flex items-center justify-center">
+                <img src="${item.image || '/static/product-1-espresso.jpg'}" alt="${p.name}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                <div class="w-full h-full hidden items-center justify-center p-6">
+                  ${item.svg}
+                </div>
+              </div>
+
+              <div class="flex items-center justify-between text-[11px] mb-1">
+                <span class="font-bold uppercase tracking-wider text-coffee-caramel">${item.category}</span>
+                <span class="text-coffee-textSecondary font-mono font-medium">${p.stock} in stock</span>
+              </div>
+
+              <h3 class="text-base font-bold text-coffee-textPrimary mb-1 leading-snug">${p.name}</h3>
+              <p class="text-xs text-coffee-textSecondary leading-relaxed mb-4 line-clamp-2">
+                ${item.desc}
+              </p>
+            </div>
+
+            <div class="pt-3 border-t border-coffee-sand/50 space-y-3">
+              <div class="flex items-baseline justify-between">
+                <span class="text-[11px] text-coffee-textSecondary">Price</span>
+                <span class="text-base font-bold text-coffee-textPrimary font-mono">$${p.price.toFixed(2)}</span>
+              </div>
+
+              <button onclick="addToCart(${p.id})" class="w-full h-10 pill-btn-primary text-xs font-semibold flex items-center justify-center space-x-1.5 shadow-sm">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Add to Bag</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Load Products Catalog from Backend
+    async function loadProducts() {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/products`);
+        if (!res.ok) {
+          throw new Error("Service Unavailable (503 Pool Starved)");
+        }
+        allProducts = await res.json();
+        renderProductsGrid();
+      } catch (err) {
+        const grid = document.getElementById("product-grid");
+        grid.innerHTML = `
+          <div class="col-span-full coffee-card p-8 text-center bg-coffee-foam border-coffee-sand">
+            <h4 class="text-sm font-bold text-coffee-textPrimary mb-1">Store Menu Temporarily Unavailable</h4>
+            <p class="text-xs text-coffee-textSecondary max-w-sm mx-auto mb-4">
+              Database connection pool is currently saturated (503). High volume is being simulated.
+            </p>
+            <button onclick="loadProducts()" class="h-10 px-6 rounded-full text-xs font-semibold pill-btn-secondary">
+              Retry Connection
+            </button>
+          </div>
+        `;
+      }
+    }
+
+    // Customer Order History Fetch (Past Orders)
+    async function fetchHistory() {
+      const box = document.getElementById("history-box");
+      const countEl = document.getElementById("order-history-count");
+      const btn = document.getElementById("btn-refresh-history");
+      
+      btn.disabled = true;
+      box.innerHTML = `<span class="text-coffee-textSecondary">Scanning order items in database...</span>`;
+
+      const startTime = performance.now();
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/customers/42/orders`);
+        const duration = Math.round(performance.now() - startTime);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.detail || "Database query failed");
+        }
+
+        countEl.innerText = data.orders_count;
+        box.innerHTML = `
+          <div class="flex items-center justify-between w-full">
+            <div>
+              <span class="font-bold text-coffee-textPrimary">Sync Complete:</span>
+              <span class="text-coffee-textSecondary ml-1">${data.orders_count} historical orders found for Customer 42.</span>
+            </div>
+            <span class="text-[11px] font-mono text-coffee-textSecondary">${duration} ms</span>
+          </div>
+        `;
+      } catch (err) {
+        const duration = Math.round(performance.now() - startTime);
+        countEl.innerText = "—";
+        box.innerHTML = `
+          <div class="flex items-center justify-between w-full text-coffee-danger">
+            <div>
+              <span class="font-bold">Request Timed Out:</span>
+              <span class="ml-1">${err.message}</span>
+            </div>
+            <span class="text-[11px] font-mono">${duration} ms</span>
+          </div>
+        `;
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // Toggle Swarm Load Generator (Vector A)
+    async function toggleSwarm() {
+      const btn = document.getElementById("btn-toggle-swarm");
+      const label = document.getElementById("btn-swarm-label");
+
+      if (!isSwarmRunning) {
+        label.innerText = "Launching...";
+        btn.disabled = true;
+
+        try {
+          const res = await fetch(`${API_BASE}/api/admin/start-swarm`, { method: "POST" });
+          const data = await res.json();
+          isSwarmRunning = true;
+          
+          btn.className = "w-full h-10 px-3.5 rounded-full text-xs font-semibold transition flex items-center justify-center space-x-2 pill-btn-danger";
+          btn.innerHTML = `
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+            <span id="btn-swarm-label">Stop Swarm</span>
+          `;
+          showToast("Swarm started: 25 users spawning @ 5/sec", "warning");
+        } catch (err) {
+          showToast("Failed to launch swarm: " + err.message, "error");
+          label.innerText = "Start Swarm";
+        } finally {
+          btn.disabled = false;
+        }
+
+      } else {
+        label.innerText = "Stopping...";
+        btn.disabled = true;
+
+        try {
+          await fetch(`${API_BASE}/api/admin/stop-swarm`, { method: "POST" });
+          isSwarmRunning = false;
+
+          btn.className = "w-full h-10 px-3.5 rounded-full text-xs font-semibold transition flex items-center justify-center space-x-2 pill-btn-primary";
+          btn.innerHTML = `
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span id="btn-swarm-label">Start Swarm</span>
+          `;
+          showToast("Swarm stopped. System recovering.", "info");
+        } catch (err) {
+          showToast("Error stopping swarm: " + err.message, "error");
+        } finally {
+          btn.disabled = false;
+        }
+      }
+    }
+
+    // Toggle Contract Drift (Vector B) - Beside Start Swarm
+    async function toggleContractDrift() {
+      const btn = document.getElementById("btn-toggle-drift");
+      btn.disabled = true;
+
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/toggle-contract-drift`, { method: "POST" });
+        const data = await res.json();
+        isDriftActive = data.drift_enabled;
+        updateDriftButtonUI();
+
+        if (isDriftActive) {
+          showToast("Contract Drift ACTIVE: RoastPay v2 will reject checkouts (HTTP 422)", "warning");
+        } else {
+          showToast("Contract Drift OFF: Normal payment baseline restored", "info");
+        }
+      } catch (err) {
+        showToast("Error toggling contract drift: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function updateDriftButtonUI() {
+      const btn = document.getElementById("btn-toggle-drift");
+      const label = document.getElementById("btn-drift-label");
+      const dot = document.getElementById("drift-status-dot");
+      if (!btn || !label || !dot) return;
+
+      if (isDriftActive) {
+        btn.className = "w-full h-10 px-3.5 rounded-full text-xs font-semibold transition flex items-center justify-center space-x-2 pill-btn-warning shadow-sm";
+        dot.className = "w-2 h-2 rounded-full bg-white inline-block";
+        label.innerText = "Contract Drift: Active (v2 422)";
+      } else {
+        btn.className = "w-full h-10 px-3.5 rounded-full text-xs font-semibold transition flex items-center justify-center space-x-2 pill-btn-secondary";
+        dot.className = "w-2 h-2 rounded-full bg-coffee-sand inline-block";
+        label.innerText = "Contract Drift: Off";
+      }
+    }
+
+    async function checkDriftStatus() {
+      try {
+        const res = await fetch(`${API_BASE}/api/admin/drift-status`);
+        if (res.ok) {
+          const data = await res.json();
+          isDriftActive = data.drift_enabled;
+          updateDriftButtonUI();
+        }
+      } catch (e) {}
+    }
+
+    // Health / Latency Monitor Loop
+    async function checkHealth() {
+      const start = performance.now();
+      const latencyEl = document.getElementById("metric-latency");
+
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/products`, { cache: "no-store" });
+        const duration = Math.round(performance.now() - start);
+
+        if (!res.ok) {
+          // If request queued and stalled (>500ms) before 503, show the stall time; otherwise show "-- ms"
+          latencyEl.innerText = duration >= 500 ? `${duration} ms` : "-- ms";
+          latencyEl.className = "font-mono font-bold text-coffee-danger";
+          return;
+        }
+
+        latencyEl.innerText = `${duration} ms`;
+        if (duration > 800) {
+          latencyEl.className = "font-mono font-bold text-coffee-danger";
+        } else if (duration > 300) {
+          latencyEl.className = "font-mono font-semibold text-coffee-warning";
+        } else {
+          latencyEl.className = "font-mono font-semibold text-coffee-textPrimary";
+        }
+      } catch (e) {
+        const duration = Math.round(performance.now() - start);
+        latencyEl.innerText = duration >= 500 ? `${duration} ms` : "-- ms";
+        latencyEl.className = "font-mono font-bold text-coffee-danger";
+      }
+    }
+
+    // Clean Toast System
+    function showToast(message, type = "info") {
+      const container = document.getElementById("toast-container");
+      const toast = document.createElement("div");
+
+      const styles = {
+        success: "bg-coffee-white text-coffee-textPrimary border-coffee-sand shadow-md",
+        error: "bg-[#FDF2F2] text-coffee-danger border-red-200 shadow-md",
+        warning: "bg-[#FFFBEB] text-coffee-warning border-amber-200 shadow-md",
+        info: "bg-coffee-white text-coffee-textPrimary border-coffee-sand shadow-md"
+      };
+
+      toast.className = `px-5 py-3 rounded-2xl border text-xs font-semibold transition-all duration-200 opacity-0 translate-y-2 pointer-events-auto ${styles[type] || styles.info}`;
+      toast.innerText = message;
+
+      container.appendChild(toast);
+
+      requestAnimationFrame(() => {
+        toast.classList.remove("opacity-0", "translate-y-2");
+      });
+
+      setTimeout(() => {
+        toast.classList.add("opacity-0", "translate-y-2");
+        setTimeout(() => toast.remove(), 250);
+      }, 3500);
+    }
+
+    // Initializer
+    window.addEventListener("DOMContentLoaded", () => {
+      loadProducts();
+      checkHealth();
+      checkDriftStatus();
+      pingTimer = setInterval(checkHealth, 2000);
+    });
+  </script>
+</body>
+</html>

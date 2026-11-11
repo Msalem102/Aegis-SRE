@@ -1,0 +1,37 @@
+version: "1.0"
+
+project:
+  service_name: "cupertino-coffee-store"
+  repository: "ahmedharib/mockStore"
+  default_branch: "master"
+  code_dir: "mockStore"
+  read_only_source: false
+
+observability:
+  provider: "direct"
+  watchdog_interval_seconds: 40
+
+database:
+  engine: "postgres"
+  read_only_connection_env: "DATABASE_RO_URL"
+  require_read_only_mode: true
+  schema_path: "auto"
+  telemetry_source: "auto"
+  migration_output_dir: "migrations"
+  max_healing_retries: 3
+  sla_thresholds:
+    p99_latency_ms: 1000.0
+    max_cpu_percent: 80.0
+    min_sandbox_speedup_percent: 80.0
+
+upstream_apis:
+  - name: "coffee_payment_gateway"
+    baseline_spec: "contracts/payment_gateway_v1.json"
+    spec_url: "contracts/payment_gateway_v2.json"
+    code_root: "app"
+    test_target: "tests/test_payment_checkout.py"
+
+sandbox:
+  provider: "modal"
+  app_name: "aegis-sre"
+  timeout_seconds: 120

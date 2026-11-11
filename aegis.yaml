@@ -1,0 +1,50 @@
+# =============================================================================
+# Aegis SRE — Project Integration Contract Manifest (aegis.yaml)
+# =============================================================================
+# Any service adhering to this manifest can be autonomously monitored, diagnosed,
+# sandboxed, and remediated by Aegis SRE (powered by Meta Muse Spark & Modal).
+
+version: "1.0"
+
+project:
+  service_name: "cupertino-coffee-store"
+  repository: "ahmedharib/mockStore"
+  default_branch: "master"
+
+# -----------------------------------------------------------------------------
+# Continuous Monitoring & Direct Watchdog
+# -----------------------------------------------------------------------------
+observability:
+  provider: "direct"
+  watchdog_interval_seconds: 40
+
+# -----------------------------------------------------------------------------
+# Database Performance & Zero-Downtime Indexing Contract
+# Requirement: PostgreSQL with strictly Read-Only inspection access (mode=ro)
+# -----------------------------------------------------------------------------
+database:
+  engine: "postgres"
+  read_only_connection_env: "DATABASE_RO_URL"
+  require_read_only_mode: true
+  schema_path: "auto"
+  telemetry_source: "auto"
+  migration_output_dir: "migrations"
+  max_healing_retries: 3
+  sla_thresholds:
+    p99_latency_ms: 1000.0
+    max_cpu_percent: 80.0
+    min_sandbox_speedup_percent: 80.0
+
+# -----------------------------------------------------------------------------
+# Upstream API Contract Drift Auto-Remediation
+# Add upstream API dependencies below (see mockstore_aegis.yaml / README.md):
+# -----------------------------------------------------------------------------
+upstream_apis: []
+
+# -----------------------------------------------------------------------------
+# Ephemeral Sandbox Verification Gate (Modal Cloud Serverless Micro-VMs)
+# -----------------------------------------------------------------------------
+sandbox:
+  provider: "modal"
+  app_name: "aegis-sre"
+  timeout_seconds: 120

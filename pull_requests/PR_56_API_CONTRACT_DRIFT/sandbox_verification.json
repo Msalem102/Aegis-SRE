@@ -1,0 +1,28 @@
+{
+  "sandbox_environment": "MODAL_CLOUD_LINUX_CONTAINER",
+  "sandbox_id": "sb-oamVWxRLJF1TUlV6nXbMm7",
+  "deterministic_gate_passed": true,
+  "duration_seconds": 4.67,
+  "exit_code": 0,
+  "test_target": "tests/test_payment_checkout.py",
+  "applied_files": [
+    "app/payment_models.py",
+    "app/payment_client.py"
+  ],
+  "dependencies_installed": [
+    "pytest",
+    "pydantic",
+    "httpx",
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "psycopg2-binary>=2.9.9",
+    "locust>=2.24.0"
+  ],
+  "pytest_summary": {
+    "total_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "execution_time_seconds": 0.07,
+    "output": "tests/test_payment_checkout.py::test_coffee_order_checkout_conforms_to_roastpay_v2 PASSED [100%]\n============================== 1 passed in 0.07s =============================="
+  }
+}
