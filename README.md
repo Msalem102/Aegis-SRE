@@ -9,7 +9,7 @@
 - [Design justification (PDF)](milestone/docs/DESIGN_JUSTIFICATION.pdf)
 - [Illustrated user flow (PDF)](milestone/docs/USER_FLOW.pdf)
 - [Architecture and protocols (PDF)](milestone/docs/ARCHITECTURE_AND_PROTOCOLS.pdf)
-- [Current wireframes and mockups](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi?node-id=20-116)
+- [Current wireframes and mockups](https://www.figma.com/design/3zM5YkkarvApLs90BDiHmi/Aegis-SRE-%E2%80%94-Mobile-Wireframes?node-id=20-116&t=gydfTQnMNGPgDZ0s-1)
 - [Interactive prototype](https://www.figma.com/proto/3zM5YkkarvApLs90BDiHmi?node-id=20-117&starting-point-node-id=20%3A117)
 - [Milestone overview](milestone/README.md)
 
