@@ -22,8 +22,4 @@ A proposed Flutter mobile companion for investigating incidents, inspecting isol
 
 Sign in → My Work → Inbox incident update → Queue fix review → external GitHub review. Agent conversations and Agent chat provide an incident-linked assistant concept. The proposed implementation uses MVVM, HTTPS/JSON and foreground SSE. Authentication, chat and future agents are design proposals. A verified candidate or PR is not a production deployment.
 
-## Attribution and status
 
-The imported backend is Aegis SRE by [Ahmed Harib](https://github.com/ahmedharib/Aegis-SRE). Its authorship and original repository history are preserved. This individual submission adds the proposed mobile design and architecture documentation. GitHub/Mobbin screenshots informed the UI patterns; the mascot was generated using Figma AI.
-
-Reports and approved visual designs are included. Prototype navigation and instructor viewing access were checked and confirmed by Mohamed Salem. Class-sheet registration and portal submission remain separate submission steps.
