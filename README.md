@@ -13,9 +13,7 @@
 - [Interactive prototype](https://www.figma.com/proto/3zM5YkkarvApLs90BDiHmi?node-id=20-117&starting-point-node-id=20%3A117)
 - [Milestone overview](milestone/README.md)
 
-The mobile interface is a design prototype over the imported Aegis SRE backend. Authentication and agent chat are proposed features. A verified candidate or PR does not imply a production deployment. Prototype navigation and instructor viewing access were confirmed by Mohamed Salem.
-
-The original backend documentation and attribution are preserved below.
+We worked on the Aegis SRE backend together, and I will be using it as the foundation to build upon for this mobile interface prototype. Authentication and agent chat are currently proposed features, and prototype navigation and instructor viewing access have been confirmed. The original backend documentation and attribution are preserved below
 
 ---
 
